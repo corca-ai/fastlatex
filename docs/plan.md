@@ -379,14 +379,175 @@ WASM worker는 `_compileLaTeX()` 동기 실행 중 메시지 큐 차단 → 컴�
 
 **사용자 가치:** 생산성 급상승(편집-결과 왕복 비용이 사라짐)
 
-* SyncTeX 생성/파싱 파이프라인
-* PDF 클릭 → 소스 위치 점프
-* 소스 커서 → PDF 하이라이트(Forward search)
-* 오류를 소스 위치에 매핑(최소한 라인 수준)
-
 **KPI:** 점프 50ms 내, 정확도(대부분의 텍스트) 95%+
 
-**이 시점에 “초기 제품”으로 공개 베타가 가능**
+**이 시점에 "초기 제품"으로 공개 베타가 가능**
+
+### 기술 현황 분석
+
+**SyncTeX 상태:** SwiftLaTeX WASM 바이너리에서 SyncTeX 코드 **완전 제거**.
+- `strings swiftlatexpdftex.wasm | grep synctex` → 0건
+- `pdftex0.c`, `pdftexini.c`에 synctex 참조 없음 (WEB-to-C 변환 시 제외)
+- `pdftexcoerce.h`에 `#include <synctexdir/synctex.h>` 잔존하나 실제 디렉토리 없음
+- `\synctex=1` TeX primitive도 동작 불가 (바이너리에 코드 자체가 없음)
+
+**Source specials 상태:** 바이너리에 `src:`, `src:%d` 문자열 존재.
+- `makesrcspecial()` 코드가 컴파일됨
+- 단, PDF 모드에서 `src:` specials는 무시됨 (DVI 전용) → 사용 불가
+
+**Worker 프로토콜:** 파일 읽기 명령 없음 (write만 가능). compile 결과로 PDF + log만 반환.
+WASM FS에서 `FS.readFile()`은 가능 (PDF 읽기에 이미 사용 중).
+
+**결론:** WASM 재빌드가 필수. 2-phase 접근:
+- Phase 1: pdf.js 텍스트 추출 기반 **근사** inverse search (WASM 변경 없이 즉시 가능)
+- Phase 2: WASM 재빌드 + SyncTeX로 **정밀** 양방향 검색
+
+---
+
+### A. Worker 프로토콜 확장 (`readfile` 명령)
+
+SyncTeX든 텍스트 기반이든 WASM FS에서 파일을 읽어올 수 있어야 한다.
+Phase 2에서 `.synctex` 파일 읽기에 필수, Phase 1에서도 `.aux` 등 디버깅에 유용.
+
+- [ ] `swiftlatexpdftex.js` (worker): `readfile` 명령 추가
+  ```js
+  case "readfile":
+    try {
+      let data = FS.readFile(msg.url, {encoding: msg.encoding || "binary"})
+      self.postMessage({cmd: "readfile", url: msg.url, data: data, result: "ok"})
+    } catch(e) {
+      self.postMessage({cmd: "readfile", url: msg.url, result: "failed"})
+    }
+  ```
+- [ ] `tex-engine.ts`: `readFile(path: string): Promise<Uint8Array | null>` 인터페이스 추가
+- [ ] `swiftlatex-engine.ts`: `readFile()` 구현 — worker에 `readfile` postMessage + 응답 대기
+- [ ] 검증: 컴파일 후 `.log` 파일을 `readFile()`로 읽어오기
+
+### B. Phase 1 — pdf.js 텍스트 기반 inverse search (WASM 변경 없음)
+
+pdf.js `getTextContent()` API로 PDF 텍스트 + 좌표를 추출하고,
+소스 텍스트와 매칭하여 **줄 번호를 역산출**하는 근사 방식.
+정확도 ~80-90% (일반 텍스트), 수식/표는 매핑 불가.
+
+- [ ] `src/synctex/text-mapper.ts` 생성: PDF 텍스트 ↔ 소스 매핑
+  - `page.getTextContent()` → `TextItem[]` (text, transform matrix)
+  - 각 TextItem의 문자열을 소스 텍스트에서 검색 → 줄 번호 매핑
+  - 매핑 캐시: `Map<page, Map<textItemIndex, {file, line}>>` (컴파일마다 재생성)
+- [ ] `src/viewer/pdf-viewer.ts`: 클릭 핸들러 추가
+  - 캔버스 클릭 좌표 → PDF 좌표(pt) 변환: `x / scale`, `y / scale`
+  - 해당 좌표에 가장 가까운 TextItem 찾기
+  - TextItem → 소스 줄 번호 조회 → 콜백으로 에디터에 전달
+- [ ] `src/main.ts`: PDF 클릭 → `revealLine()` 연결
+- [ ] `src/viewer/pdf-viewer.ts`: Ctrl+클릭(Mac: Cmd+클릭)으로 동작 (일반 클릭과 구분)
+- [ ] 단위 테스트: 텍스트 매칭 알고리즘 정확도
+- [ ] 검증: 간단한 문서에서 텍스트 클릭 → 소스 줄 이동
+
+### C. Phase 2 — WASM 재빌드 (SyncTeX 활성화)
+
+SwiftLaTeX `pdftex.wasm` 빌드에 SyncTeX 라이브러리를 추가.
+**주의:** WEB-to-C 재생성이 필요할 수 있음 (synctex 훅이 pdftex0.c에 없음).
+
+- [ ] 빌드 환경 구축
+  - Emscripten SDK 설치 (`emsdk`)
+  - SwiftLaTeX/pdftex.wasm 소스 클론
+  - 기존 바이너리와 동일한 결과 나오는지 빌드 테스트
+- [ ] TeX Live에서 synctex 소스 가져오기
+  - `texk/web2c/synctexdir/` — `synctex.c`, `synctex.h`, `synctex-common.h`
+  - `texk/web2c/synctexdir/synctex-e-tex.ch` (change file)
+- [ ] WEB-to-C 재생성 (synctex 훅 포함)
+  - `tie -c pdftex-final.ch pdftex.ch synctex-e-tex.ch` (change file 병합)
+  - `tangle pdftex.web pdftex-final.ch` → `pdftex.p`
+  - `web2c pdftex.p` → `pdftex0.c` (synctex 훅 포함)
+  - **대안:** pdftex0.c를 수동 패치 (synctex 훅 위치 특정 후 삽입)
+- [ ] Makefile 수정
+  - `TEXSOURCES`에 `synctexdir/synctex.c` 추가
+  - `-I synctexdir` 인클루드 경로 추가
+- [ ] `main.c` 수정: `_compile()`에 `synctexoption = 1` 추가
+- [ ] WASM 빌드 + 테스트
+  - `emmake make` → `swiftlatexpdftex.wasm` + `.js` 생성
+  - 기존 기능 회귀 테스트 (컴파일, 패키지 로드)
+  - `FS.readFile("main.synctex")` 또는 `.synctex.gz`로 SyncTeX 데이터 확인
+- [ ] Worker JS 수정: 컴파일 후 `.synctex` 파일 자동 읽어서 postMessage에 포함
+- [ ] `types.ts`: `CompileResult`에 `synctex: string | null` 필드 추가
+- [ ] `swiftlatex-engine.ts`: compile() 응답에서 synctex 데이터 추출
+- [ ] 검증: 컴파일 결과에 SyncTeX 데이터 포함 확인
+
+### D. SyncTeX 파서 + 검색 로직
+
+LaTeX-Workshop의 TypeScript SyncTeX 파서 포팅 (MIT 라이선스).
+원본: `github.com/James-Yu/LaTeX-Workshop/src/locate/synctex/`
+
+- [ ] `src/synctex/parser.ts`: SyncTeX 텍스트 파서 (~300줄)
+  - Node.js 의존성 제거 (fs, zlib, iconv → 브라우저 API)
+  - `.synctex.gz` 압축 해제: `DecompressionStream` API 또는 `pako`
+  - 파싱 결과: `PdfSyncObject { files, pages, blockNumberLine, offset }`
+- [ ] `src/synctex/types.ts`: 타입 정의
+  - `PdfSyncObject`, `SyncBlock`, `Rectangle`
+  - 좌표 단위: scaled points (sp) → pt 변환 (`1 pt = 65781.76 sp`)
+- [ ] `src/synctex/search.ts`: 검색 로직 (~100줄)
+  - `inverseLookup(page, x, y) → { file, line }` — 가장 가까운 블록 찾기
+  - `forwardLookup(file, line) → { page, x, y, w, h }` — 줄 → PDF 위치
+  - 거리 계산: containment-first 휴리스틱 (블록 내부 우선, 그 다음 중심 거리)
+- [ ] 단위 테스트: 샘플 `.synctex` 파일로 파싱 + 검색 검증
+- [ ] 검증: `npx vitest run`
+
+### E. Inverse Search UI (PDF 클릭 → 소스 점프)
+
+Phase 2 SyncTeX 기반으로 Phase 1의 근사 방식을 교체.
+
+- [ ] `pdf-viewer.ts`: 클릭 핸들러 → SyncTeX inverseLookup 호출
+  - 캔버스 좌표 → PDF 좌표: `(clickX / (scale * dpr), pageHeight - clickY / (scale * dpr))`
+  - SyncTeX 좌표계: 원점 좌상단, Y축 아래 방향 (PDF와 동일)
+- [ ] `main.ts`: onInverseSearch 콜백 — `revealLine()` + 줄 하이라이트
+- [ ] Ctrl/Cmd+클릭으로 동작 (일반 클릭/텍스트 선택과 구분)
+- [ ] 시각적 피드백: 점프 후 해당 줄 2초간 하이라이트
+- [ ] 검증: E2E 테스트
+
+### F. Forward Search UI (소스 커서 → PDF 하이라이트)
+
+- [ ] `main.ts`: 에디터 커서 변경 리스너 (디바운스 300ms)
+  - `(currentFile, cursorLine)` → SyncTeX forwardLookup → `{page, x, y, w, h}`
+- [ ] `pdf-viewer.ts`: 하이라이트 오버레이
+  - 해당 페이지로 자동 스크롤 (`scrollIntoView`)
+  - 반투명 박스 오버레이 (`position: absolute`, 2초 후 페이드아웃)
+  - 페이지가 같으면 스크롤 생략
+- [ ] 단축키: Ctrl/Cmd+Enter로 명시적 forward search (커서 이동 자동 동기화는 선택적)
+- [ ] 검증: E2E 테스트
+
+### G. 검증 + KPI
+
+- [ ] E2E 테스트: PDF 텍스트 Ctrl+클릭 → 소스 줄 점프 (50ms 이내)
+- [ ] E2E 테스트: 소스 Ctrl+Enter → PDF 해당 위치 하이라이트
+- [ ] E2E 테스트: 다중 파일 (`\input{chapter1}`) 시 올바른 파일+줄 점프
+- [ ] 정확도 테스트: 10개 이상 텍스트 위치, 수식 위치, 표 위치 검증 (95%+ 목표)
+- [ ] 성능 측정: 점프 응답 시간 < 50ms (SyncTeX 파싱은 컴파일 시 1회, 검색은 O(n))
+- [ ] `docs/plan.md` 체크리스트 업데이트
+
+### 파일 변경 예상
+
+| 파일 | 작업 |
+|------|------|
+| `public/swiftlatex/swiftlatexpdftex.js` | readfile 명령 추가, synctex 반환 (Phase 2) |
+| `public/swiftlatex/swiftlatexpdftex.wasm` | SyncTeX 포함 재빌드 (Phase 2) |
+| `src/engine/tex-engine.ts` | `readFile()` 인터페이스 추가 |
+| `src/engine/swiftlatex-engine.ts` | `readFile()` 구현, synctex 데이터 추출 |
+| `src/types.ts` | `CompileResult.synctex` 필드 |
+| `src/synctex/text-mapper.ts` | 신규 — Phase 1 텍스트 기반 매핑 |
+| `src/synctex/parser.ts` | 신규 — SyncTeX 파서 (Phase 2) |
+| `src/synctex/search.ts` | 신규 — forward/inverse 검색 로직 |
+| `src/synctex/types.ts` | 신규 — SyncTeX 타입 정의 |
+| `src/viewer/pdf-viewer.ts` | 클릭 핸들러, 하이라이트 오버레이 |
+| `src/main.ts` | inverse/forward search 연결 |
+| `e2e/iteration3.spec.ts` | 신규 — E2E 검증 |
+
+### 리스크 및 대안
+
+| 리스크 | 영향 | 대안 |
+|--------|------|------|
+| WEB-to-C 재생성 실패 (빌드 시스템 복잡도) | Phase 2 지연 | pdftex0.c 수동 패치 또는 Phase 1만으로 출시 |
+| Emscripten 버전 호환 문제 | WASM 빌드 실패 | SwiftLaTeX 원본과 동일 Emscripten 버전 사용 |
+| 포맷 파일 비호환 | 컴파일 실패 | SyncTeX 추가는 포맷 파일에 영향 없음 (런타임 기능) |
+| pdf.js 텍스트 추출 정확도 낮음 | Phase 1 UX 저하 | fuzzy matching + context window 확대 |
 
 ---
 
