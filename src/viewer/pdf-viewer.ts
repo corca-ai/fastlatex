@@ -4,11 +4,12 @@ import { SynctexParser } from '../synctex/synctex-parser'
 import type { SourceLocation } from '../synctex/text-mapper'
 import { TextMapper } from '../synctex/text-mapper'
 
-// Configure PDF.js worker
+// Single shared worker instance — avoids re-fetching pdf.worker.mjs on every render
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.mjs',
   import.meta.url,
 ).toString()
+const pdfWorker = new pdfjsLib.PDFWorker()
 
 export class PdfViewer {
   private container: HTMLElement
@@ -84,7 +85,7 @@ export class PdfViewer {
 
     // Copy the data so the original ArrayBuffer isn't detached by postMessage
     const data = pdfData.slice()
-    this.pdfDoc = await pdfjsLib.getDocument({ data }).promise
+    this.pdfDoc = await pdfjsLib.getDocument({ data, worker: pdfWorker }).promise
 
     // Bail if a newer render was requested while loading
     if (generation !== this.renderGeneration) {
