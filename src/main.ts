@@ -38,6 +38,7 @@ function setStatus(status: AppStatus, detail?: string): void {
 // --- PDF Viewer ---
 const viewerContainer = document.getElementById('viewer-panel')!
 const pdfViewer = new PdfViewer(viewerContainer)
+;(globalThis as Record<string, unknown>).__pdfViewer = pdfViewer
 
 // Inverse search: Cmd/Ctrl+click on PDF → jump to source line
 pdfViewer.setInverseSearchHandler((loc) => {
@@ -136,21 +137,27 @@ function onFileSelect(path: string): void {
 const editorContainer = document.getElementById('editor-panel')!
 const initialContent = fs.readFile('main.tex') as string
 editor = createEditor(editorContainer, initialContent, onEditorChange)
+;(globalThis as Record<string, unknown>).__editor = editor
 
 // --- File Tree ---
 const fileTreeContainer = document.getElementById('file-tree-panel')!
 new FileTree(fileTreeContainer, fs, onFileSelect)
 
 // --- Forward Search (Cmd/Ctrl+Enter) ---
-document.addEventListener('keydown', (e) => {
-  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-    e.preventDefault()
-    const line = editor.getPosition()?.lineNumber
-    if (line) {
-      pdfViewer.forwardSearch(currentFile, line)
+document.addEventListener(
+  'keydown',
+  (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+      e.preventDefault()
+      e.stopPropagation()
+      const line = editor.getPosition()?.lineNumber
+      if (line) {
+        pdfViewer.forwardSearch(currentFile, line)
+      }
     }
-  }
-})
+  },
+  { capture: true },
+)
 
 // --- Layout ---
 setupDividers()
