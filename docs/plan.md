@@ -292,15 +292,34 @@ Tectonic WASM은 63% C 의존성(ICU4C/harfbuzz/freetype)으로 브라우저 WAS
 WASM worker는 `_compileLaTeX()` 동기 실행 중 메시지 큐 차단 → 컴파일 후 처리됨.
 따라서 `writefile` postMessage를 컴파일 중 보내도 안전 (다음 컴파일 전에 처리됨).
 
-- [ ] `swiftlatex-engine.ts`: `writeFile()`/`mkdir()` — compiling 상태에서도 허용 (checkReady 완화)
-- [ ] `main.ts`: `syncAndCompile()` — `isReady()` 가드 제거, 컴파일 중에도 파일 sync
-- [ ] `compile-scheduler.ts`: 컴파일 세대(generation) 카운터 추가 — 낡은 결과 무시
-- [ ] `compile-scheduler.ts`: 적응형 debounce — 최근 컴파일 시간 기반 자동 조절
+**A-1. writeFile/mkdir compiling 허용** ✅
+- [x] `swiftlatex-engine.ts`: checkReady → checkInitialized (ready|compiling 허용)
+- [x] `swiftlatex-engine.ts`: compile() 전용 checkReady는 유지 (이중 컴파일 방지)
+- [x] 검증: `npx tsgo --noEmit && npx vitest run`
+
+**A-2. syncAndCompile 수정** ✅
+- [x] `main.ts`: `syncAndCompile()` — `isReady()` 가드를 `getStatus()` 상태 체크로 교체
+- [x] `main.ts`: 엔진 미초기화 시에만 bail, compiling 중에는 파일 sync + schedule 허용
+- [x] 검증: `npx tsgo --noEmit`
+
+**A-3. 컴파일 세대(generation) 카운터** ✅
+- [x] `compile-scheduler.ts`: `generation` 카운터 — schedule()마다 증가
+- [x] `compile-scheduler.ts`: compile 시작 시 generation 캡처, 완료 시 최신 아닌 결과면 onResult 생략
+- [x] 단위 테스트: 구세대 결과 무시, 최신 결과만 전달
+- [x] 검증: `npx vitest run` (35 tests pass)
+
+**A-4. 적응형 debounce** ✅
+- [x] `compile-scheduler.ts`: 최근 컴파일 시간 추적, debounce 자동 조절
   - `debounceMs = clamp(lastCompileTime * 0.5, 150, 1000)`
-  - 빠른 문서면 debounce 줄이고, 느린 문서면 늘림
-- [ ] `main.ts`: init()에서 벤치마크 코드 제거 — main.tex 직접 컴파일만 수행
-  - bench_small.tex 컴파일 + gate check → 별도 스크립트 또는 삭제
-- [ ] 단위 테스트: 적응형 debounce, generation 무시 로직
+- [x] 단위 테스트: 컴파일 시간에 따라 debounce 변화 확인 (4 tests)
+- [x] 검증: `npx vitest run`
+
+**A-5. init() 벤치마크 제거** ✅
+- [x] `main.ts`: 벤치마크 코드 없음 확인, main.tex 직접 컴파일만
+- [x] 검증: `npx tsgo --noEmit && npx biome check src/`
+
+**A-6. 통합 검증** ✅
+- [x] 전체 체크: `npx tsgo --noEmit && npx biome check src/ && npx vitest run` — 35 tests pass
 
 **취소 전략:** SwiftLaTeX WASM worker에는 cancel 명령 없음 (`grace` = worker 종료만 가능).
 `worker.terminate()` + reinit는 ~46ms + 패키지 캐시 소실. 현실적 선택:

@@ -53,18 +53,18 @@ export class SwiftLatexEngine implements TexEngine {
   }
 
   writeFile(path: string, content: string | Uint8Array): void {
-    this.checkReady()
+    this.checkInitialized()
     this.worker!.postMessage({ cmd: 'writefile', url: path, src: content })
   }
 
   mkdir(path: string): void {
-    this.checkReady()
+    this.checkInitialized()
     if (!path || path === '/') return
     this.worker!.postMessage({ cmd: 'mkdir', url: path })
   }
 
   setMainFile(path: string): void {
-    this.checkReady()
+    this.checkInitialized()
     this.worker!.postMessage({ cmd: 'setmainfile', url: path })
   }
 
@@ -105,7 +105,7 @@ export class SwiftLatexEngine implements TexEngine {
   }
 
   flushCache(): void {
-    this.checkReady()
+    this.checkInitialized()
     this.worker!.postMessage({ cmd: 'flushcache' })
   }
 
@@ -117,9 +117,17 @@ export class SwiftLatexEngine implements TexEngine {
     }
   }
 
+  /** Guard for compile() — must be 'ready' (not already compiling) */
   private checkReady(): void {
     if (this.status !== 'ready') {
       throw new Error(`Engine not ready (status: ${this.status})`)
+    }
+  }
+
+  /** Guard for writeFile/mkdir/setMainFile — worker must exist (ready or compiling) */
+  private checkInitialized(): void {
+    if (!this.worker || this.status === 'unloaded' || this.status === 'loading') {
+      throw new Error(`Engine not initialized (status: ${this.status})`)
     }
   }
 }

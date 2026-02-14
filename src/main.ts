@@ -66,13 +66,17 @@ function onCompileResult(result: CompileResult): void {
 }
 
 // --- Compile Scheduler ---
-const scheduler = new CompileScheduler(engine, onCompileResult, setStatus)
+const scheduler = new CompileScheduler(engine, onCompileResult, setStatus, {
+  minDebounceMs: 150,
+  maxDebounceMs: 1000,
+})
 
 // --- Sync files to engine and compile ---
 function syncAndCompile(): void {
-  if (!engine.isReady()) return
+  const status = engine.getStatus()
+  if (status === 'unloaded' || status === 'loading' || status === 'error') return
 
-  // Write all modified files to engine
+  // Write modified files to engine (safe during compilation — messages queue in worker)
   for (const file of fs.getModifiedFiles()) {
     engine.writeFile(file.path, file.content)
   }
@@ -121,13 +125,6 @@ new FileTree(fileTreeContainer, fs, onFileSelect)
 // --- Layout ---
 setupDividers()
 
-// --- Test Fixtures ---
-const smallTex = `\\documentclass{article}
-\\begin{document}
-Hello, World!
-\\end{document}
-`
-
 // --- Initialize Engine ---
 async function init(): Promise<void> {
   setStatus('loading')
@@ -135,54 +132,20 @@ async function init(): Promise<void> {
   try {
     const engineStart = performance.now()
     await engine.init()
-    const engineLoadTime = performance.now() - engineStart
-    console.log(`Engine load time: ${engineLoadTime.toFixed(0)}ms`)
+    console.log(`Engine load: ${(performance.now() - engineStart).toFixed(0)}ms`)
 
     setStatus('ready')
 
-    // Write all FS files to engine
+    // Write all FS files to engine and compile
     for (const path of fs.listFiles()) {
       const file = fs.getFile(path)!
       engine.writeFile(path, file.content)
     }
     fs.markSynced()
 
-    // Set main file and trigger initial compile
     engine.setMainFile('main.tex')
-
-    // Benchmark: compile small doc
-    console.log('--- Benchmark: small doc ---')
-    engine.writeFile('bench_small.tex', smallTex)
-    engine.setMainFile('bench_small.tex')
-    const benchResult = await engine.compile()
-    console.log(
-      `Small doc compile: ${benchResult.compileTime.toFixed(0)}ms (success: ${benchResult.success})`,
-    )
-    if (!benchResult.success) {
-      console.log('Bench log:', benchResult.log)
-    }
-
-    if (benchResult.success && benchResult.pdf) {
-      const renderTime = await pdfViewer.render(benchResult.pdf)
-      console.log(`Small doc render: ${renderTime.toFixed(0)}ms`)
-    }
-
-    // Now compile the actual main.tex
-    console.log('--- Compiling main.tex ---')
-    engine.writeFile('main.tex', fs.readFile('main.tex') as string)
-    engine.setMainFile('main.tex')
-    const mainResult = await engine.compile()
-    onCompileResult(mainResult)
-
-    // Gate check
-    console.log('--- Gate Check ---')
-    console.log(`Small doc < 5s: ${benchResult.compileTime < 5000 ? 'PASS' : 'FAIL'}`)
-    if (benchResult.success && benchResult.pdf) {
-      const renderCheck = await pdfViewer.render(benchResult.pdf)
-      console.log(
-        `PDF render < 200ms/page: ${renderCheck < 200 ? 'PASS' : `FAIL (${renderCheck.toFixed(0)}ms)`}`,
-      )
-    }
+    const result = await engine.compile()
+    onCompileResult(result)
   } catch (err) {
     console.error('Engine initialization failed:', err)
     setStatus('error', String(err))

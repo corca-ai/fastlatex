@@ -1,22 +1,37 @@
 import type { CompileResult } from '../types'
 import type { TexEngine } from './tex-engine'
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value))
+}
+
 export class CompileScheduler {
   private debounceTimer: ReturnType<typeof setTimeout> | null = null
   private compiling = false
   private pendingCompile = false
-  private debounceMs: number
+  private generation = 0
+  private lastCompileTime = 0
+  private minDebounceMs: number
+  private maxDebounceMs: number
 
   constructor(
     private engine: TexEngine,
     private onResult: (result: CompileResult) => void,
     private onStatusChange: (status: 'compiling') => void,
-    debounceMs = 300,
+    { minDebounceMs = 150, maxDebounceMs = 1000 } = {},
   ) {
-    this.debounceMs = debounceMs
+    this.minDebounceMs = minDebounceMs
+    this.maxDebounceMs = maxDebounceMs
+  }
+
+  private get debounceMs(): number {
+    if (this.lastCompileTime === 0) return this.minDebounceMs
+    return clamp(this.lastCompileTime * 0.5, this.minDebounceMs, this.maxDebounceMs)
   }
 
   schedule(): void {
+    this.generation++
+
     if (this.debounceTimer) {
       clearTimeout(this.debounceTimer)
     }
@@ -36,20 +51,27 @@ export class CompileScheduler {
     if (!this.engine.isReady()) return
 
     this.compiling = true
+    const compileGeneration = this.generation
     this.onStatusChange('compiling')
 
     try {
       const result = await this.engine.compile()
-      this.onResult(result)
+      this.lastCompileTime = result.compileTime
+
+      if (compileGeneration === this.generation) {
+        this.onResult(result)
+      }
     } catch (err) {
       console.error('Compilation error:', err)
-      this.onResult({
-        success: false,
-        pdf: null,
-        log: String(err),
-        errors: [{ line: 0, message: String(err), severity: 'error' }],
-        compileTime: 0,
-      })
+      if (compileGeneration === this.generation) {
+        this.onResult({
+          success: false,
+          pdf: null,
+          log: String(err),
+          errors: [{ line: 0, message: String(err), severity: 'error' }],
+          compileTime: 0,
+        })
+      }
     } finally {
       this.compiling = false
 
@@ -66,5 +88,9 @@ export class CompileScheduler {
       this.debounceTimer = null
     }
     this.pendingCompile = false
+  }
+
+  getDebounceMs(): number {
+    return this.debounceMs
   }
 }
