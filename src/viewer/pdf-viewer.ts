@@ -1,4 +1,6 @@
 import * as pdfjsLib from 'pdfjs-dist'
+import type { SourceLocation } from '../synctex/text-mapper'
+import { TextMapper } from '../synctex/text-mapper'
 
 // Configure PDF.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
@@ -12,10 +14,22 @@ export class PdfViewer {
   private currentPage = 1
   private scale = 1.5
   private renderGeneration = 0
+  private textMapper = new TextMapper()
+  private onInverseSearch: ((loc: SourceLocation) => void) | null = null
 
   constructor(container: HTMLElement) {
     this.container = container
     this.buildControls()
+  }
+
+  /** Register callback for inverse search (Cmd/Ctrl+click on PDF → source location) */
+  setInverseSearchHandler(handler: (loc: SourceLocation) => void): void {
+    this.onInverseSearch = handler
+  }
+
+  /** Set source content for text-based inverse search */
+  setSourceContent(file: string, content: string): void {
+    this.textMapper.setSource(file, content)
   }
 
   private controlsEl!: HTMLElement
@@ -78,6 +92,15 @@ export class PdfViewer {
 
     await this.renderAllPages(generation)
 
+    // Index text content for inverse search
+    if (generation === this.renderGeneration) {
+      this.textMapper.clear()
+      for (let i = 1; i <= this.pdfDoc.numPages; i++) {
+        const page = await this.pdfDoc.getPage(i)
+        await this.textMapper.indexPage(page, i)
+      }
+    }
+
     // Destroy old document after swap
     if (oldDoc) {
       oldDoc.destroy()
@@ -114,6 +137,18 @@ export class PdfViewer {
       const ctx = canvas.getContext('2d')!
       ctx.scale(dpr, dpr)
       await page.render({ canvasContext: ctx, viewport }).promise
+
+      // Cmd/Ctrl+click → inverse search
+      canvas.addEventListener('click', (e) => {
+        if (!(e.metaKey || e.ctrlKey) || !this.onInverseSearch) return
+        e.preventDefault()
+        const rect = canvas.getBoundingClientRect()
+        const x = (e.clientX - rect.left) / this.scale
+        const y = (e.clientY - rect.top) / this.scale
+        const loc = this.textMapper.lookup(i, x, y)
+        if (loc) this.onInverseSearch(loc)
+      })
+      canvas.dataset.pageNum = String(i)
 
       wrapper.appendChild(canvas)
       fragment.appendChild(wrapper)

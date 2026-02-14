@@ -39,6 +39,14 @@ function setStatus(status: AppStatus, detail?: string): void {
 const viewerContainer = document.getElementById('viewer-panel')!
 const pdfViewer = new PdfViewer(viewerContainer)
 
+// Inverse search: Cmd/Ctrl+click on PDF → jump to source line
+pdfViewer.setInverseSearchHandler((loc) => {
+  if (loc.file !== currentFile) {
+    onFileSelect(loc.file)
+  }
+  revealLine(editor, loc.line)
+})
+
 // --- Error Log ---
 const errorLogContainer = document.getElementById('error-log-panel')!
 const errorLog = new ErrorLog(errorLogContainer, (line) => {
@@ -56,6 +64,14 @@ function onCompileResult(result: CompileResult): void {
   }
 
   if (result.success && result.pdf) {
+    // Update source content for inverse search
+    for (const path of fs.listFiles()) {
+      const file = fs.getFile(path)
+      if (file && typeof file.content === 'string') {
+        pdfViewer.setSourceContent(path, file.content)
+      }
+    }
+
     setStatus('rendering')
     pdfViewer.render(result.pdf).then((renderTime) => {
       console.log(`PDF render: ${renderTime.toFixed(0)}ms`)
