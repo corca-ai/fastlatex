@@ -490,21 +490,28 @@ cp dist/swiftlatexpdftex.{js,wasm} ../public/swiftlatex/
 
 ### D. SyncTeX 파서 + 검색 로직 ✅
 
-독자적 TypeScript SyncTeX 파서 구현 (파서 + 검색을 단일 클래스로 통합).
+참조 C 구현(`synctex_parser.c`, Jérôme Laurens) 알고리즘을 충실히 포팅한 트리 기반 파서.
 
-- [x] `src/synctex/synctex-parser.ts`: SyncTeX 텍스트 파서 + 검색 (~390줄)
+- [x] `src/synctex/synctex-parser.ts`: 참조 알고리즘 포팅 (~840줄)
   - `.synctex.gz` 압축 해제: 브라우저 `DecompressionStream` API
   - Preamble 파싱: `Input:`, `Magnification:`, `Unit:`, `X Offset:`, `Y Offset:`
   - Content 파싱: `{page`, `[vbox`, `(hbox`, `hvoid`, `xkern`, `gglue`, `$math` 등 8종 노드
+  - **트리 구조**: 스택 기반 파싱으로 `parent`/`children` 포인터 구축
+  - **friend index**: `"tag:line"` → nodes 맵으로 O(1) forward lookup
   - 좌표 변환: TeX sp → PDF pt (`value * unit * mag / 1000 / 65536 * 72 / 72.27`)
-  - `inverseLookup(page, x, y)`: containment-first 휴리스틱 (hbox 내부 → 가장 가까운 노드)
-  - `forwardLookup(file, line)`: 소스 위치 → PDF bbox (첫 페이지 우선)
-- [x] `SynctexData` 타입: `inputs: Map<number, string>`, `pages: Map<number, SynctexNode[]>`
-- [x] 단위 테스트: 24 tests (`src/synctex/synctex-parser.test.ts`)
+  - **inverse search** (참조: `synctex_iterator_new_edit`):
+    hbox 스캔 → smallest container → deepest container DFS → L/R bracketing → pickBestLR
+  - **forward search** (참조: `synctex_iterator_new_display`):
+    nearest-line zigzag (±100 tries) → non-box first pass → leaf→ancestor hbox resolution
+  - **L1 (Manhattan) distance**: `hOrderedDistance`, `vOrderedDistance`, `pointNodeDistance`, `distToBox`
+  - kern 노드 특수 거리 계산, 등거리 시 non-kern 우선
+- [x] `SynctexData` 타입: `inputs`, `pages`, `pageRoots`, `friendIndex`
+- [x] 단위 테스트: 31 tests (`src/synctex/synctex-parser.test.ts`)
   - 파싱: preamble, inputs, nodes, 다중 페이지, 빈 데이터, void/kern/glue
-  - Inverse search: containment, nearest fallback, 빈 페이지
-  - Forward search: 정확 매칭, 미발견 파일/라인, filename suffix 매칭
-- [x] 검증: `npx vitest run` — 69 tests pass
+  - 트리 구조: parent-child 관계, friend index 내용 검증
+  - Inverse search: containment, L/R bracketing, nearest fallback, 빈 페이지, 자식 노드 라인 반환
+  - Forward search: 정확 매칭, 미발견 파일/라인, suffix 매칭, leaf→ancestor hbox 해소
+- [x] 검증: `npx vitest run` — 76 tests pass
 
 ### E. Inverse/Forward Search UI (SyncTeX 통합) ✅
 
@@ -538,9 +545,7 @@ Phase 1 텍스트 기반 forward search 구현. SyncTeX 없이도 동작.
 - [x] 단위 테스트: 3 tests (forward lookup, TeX-only lines → null, unknown file → null)
 - [x] 커밋: `86bd3d2`
 
-### G. 검증 + KPI (Phase 1) ✅
-
-Phase 1 (텍스트 기반) 검증. Phase 2 (SyncTeX) 구현 후 정밀도 재측정 필요.
+### G. 검증 + KPI ✅
 
 - [x] E2E 테스트: PDF Cmd+클릭 → 소스 점프 (앱 정상 동작 확인)
 - [x] E2E 테스트: Cmd+Enter → PDF 하이라이트 표시 + 2초 후 페이드아웃
@@ -548,10 +553,13 @@ Phase 1 (텍스트 기반) 검증. Phase 2 (SyncTeX) 구현 후 정밀도 재측
 - [x] E2E 테스트: `readFile('main.log')` → TeX 로그 반환
 - [x] 버그 수정: forward search 키보드 핸들러 `{ capture: true }` — Monaco보다 먼저 이벤트 처리하여 newline 삽입 방지
 - [x] `window.__editor`, `window.__pdfViewer` 노출 (E2E 테스트용)
-- [x] 전체 14 E2E 테스트 통과, 45 단위 테스트 통과
-- [ ] E2E 검증: SyncTeX 데이터 생성 확인 (docker compose up → 컴파일 → synctex 데이터 확인)
-- [ ] 정확도 테스트: SyncTeX 기반 정밀 측정 (95%+ 목표)
-- [ ] 성능 측정: 점프 응답 시간 < 50ms 측정
+- [x] 전체 19 E2E 테스트 통과, 76 단위 테스트 통과
+- [x] 참조 알고리즘 포팅 (synctex_parser.c → TypeScript): 31 parser tests pass
+- [x] PDFWorker 재사용 — 편집마다 `pdf.worker.mjs` 재요청 제거
+- [x] 데모 문서 업그레이드: 2단 레이아웃, 다중 페이지, 수학 섹션 6개 (SyncTeX 테스트용)
+- [x] E2E 검증: SyncTeX 데이터 생성 확인 — 13 inputs, 2 pages, 1191 nodes (page 1)
+- [x] 정확도 테스트: 일반 텍스트 100%, 복합 문서(2단+수식) 84% (±2줄), 수식 환경이 주 미스 원인
+- [x] 성능 측정: inverse 0.02ms, forward 0.006ms (KPI 50ms 대비 **2000배+** 빠름)
 
 ### 파일 변경 (완료)
 
@@ -566,13 +574,25 @@ Phase 1 (텍스트 기반) 검증. Phase 2 (SyncTeX) 구현 후 정밀도 재측
 | `wasm-build/library.js` | Emscripten JS library bridge | ✅ |
 | `public/swiftlatex/swiftlatexpdftex.js` | 재빌드 (109KB) | ✅ |
 | `public/swiftlatex/swiftlatexpdftex.wasm` | SyncTeX 포함 재빌드 (1.6MB) | ✅ |
-| `src/synctex/synctex-parser.ts` | SyncTeX 파서 + 검색 (통합) | ✅ |
-| `src/synctex/synctex-parser.test.ts` | 24 unit tests | ✅ |
+| `src/synctex/synctex-parser.ts` | 참조 알고리즘 포팅 (~840줄, 트리 기반) | ✅ |
+| `src/synctex/synctex-parser.test.ts` | 31 unit tests | ✅ |
 | `src/synctex/text-mapper.ts` | Phase 1 텍스트 매핑 (fallback) | ✅ |
 | `src/engine/swiftlatex-engine.ts` | synctex 데이터 추출 | ✅ |
 | `src/types.ts` | `CompileResult.synctex` 필드 | ✅ |
 | `src/viewer/pdf-viewer.ts` | synctex 기반 inverse/forward search | ✅ |
 | `src/main.ts` | synctex 파싱 + fallback 통합 | ✅ |
+| `src/fs/virtual-fs.ts` | 2단 다중 페이지 수학 데모 문서 | ✅ |
+| `e2e/synctex-e2e.spec.ts` | SyncTeX E2E: 데이터생성/정확도/성능 (5 tests) | ✅ |
+
+### KPI 달성 현황
+
+| 지표 | 목표 | 실측 | 상태 |
+|------|------|------|------|
+| 점프 응답 시간 | < 50ms | inverse 0.02ms, forward 0.006ms | ✅ 2000배+ 초과 |
+| 일반 텍스트 정확도 | 95%+ | 100% (3/3 exact) | ✅ |
+| 복합 문서 정확도 | 95%+ | 84% (±2줄) | ⚠️ 수식 환경 미스 |
+| Forward search 커버리지 | — | 빈 줄도 zigzag로 해결 | ✅ |
+| SyncTeX 데이터 생성 | 동작 | 13 inputs, 2 pages, 1191 nodes | ✅ |
 
 ### 리스크 및 대안 (사후 분석)
 

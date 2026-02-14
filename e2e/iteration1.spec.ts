@@ -75,6 +75,10 @@ test.describe('Iteration 1 Verification', () => {
   })
 
   test('3. TeX error → error log + line jump', async ({ page }) => {
+    // Wait for initial compilation to fully settle (new default doc is multi-page)
+    await expect(page.locator('.pdf-page-container canvas').first()).toBeVisible({ timeout: 15_000 })
+    await page.waitForTimeout(500)
+
     // Type invalid LaTeX to trigger an error
     const editor = page.locator('.monaco-editor textarea')
     await editor.focus()
@@ -95,7 +99,7 @@ test.describe('Iteration 1 Verification', () => {
 
     // Check error log panel shows errors
     const errorLog = page.locator('#error-log-panel')
-    await expect(errorLog.locator('.log-entry.error').first()).toBeVisible({ timeout: 5_000 })
+    await expect(errorLog.locator('.log-entry.error').first()).toBeVisible({ timeout: 10_000 })
 
     // Verify error message contains something about the undefined command
     const errorText = await errorLog.locator('.log-entry.error').first().textContent()
