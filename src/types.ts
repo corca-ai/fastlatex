@@ -5,6 +5,8 @@ export interface CompileResult {
   errors: TexError[]
   /** Time in milliseconds */
   compileTime: number
+  /** Raw synctex data (uncompressed or gzipped) from pdfTeX -synctex=1 */
+  synctex: Uint8Array | null
 }
 
 export interface TexError {

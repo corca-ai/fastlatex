@@ -1,4 +1,6 @@
 import * as pdfjsLib from 'pdfjs-dist'
+import type { SynctexData } from '../synctex/synctex-parser'
+import { SynctexParser } from '../synctex/synctex-parser'
 import type { SourceLocation } from '../synctex/text-mapper'
 import { TextMapper } from '../synctex/text-mapper'
 
@@ -15,6 +17,8 @@ export class PdfViewer {
   private scale = 1.5
   private renderGeneration = 0
   private textMapper = new TextMapper()
+  private synctexData: SynctexData | null = null
+  private synctexParser = new SynctexParser()
   private onInverseSearch: ((loc: SourceLocation) => void) | null = null
 
   constructor(container: HTMLElement) {
@@ -27,9 +31,14 @@ export class PdfViewer {
     this.onInverseSearch = handler
   }
 
-  /** Set source content for text-based inverse search */
+  /** Set source content for text-based inverse search (fallback) */
   setSourceContent(file: string, content: string): void {
     this.textMapper.setSource(file, content)
+  }
+
+  /** Set parsed SyncTeX data for precise PDF↔source sync */
+  setSynctexData(data: SynctexData | null): void {
+    this.synctexData = data
   }
 
   private controlsEl!: HTMLElement
@@ -138,13 +147,23 @@ export class PdfViewer {
       ctx.scale(dpr, dpr)
       await page.render({ canvasContext: ctx, viewport }).promise
 
-      // Click → inverse search
+      // Click → inverse search (synctex first, text-mapper fallback)
       canvas.addEventListener('click', (e) => {
         if (!this.onInverseSearch) return
         const rect = canvas.getBoundingClientRect()
         const x = (e.clientX - rect.left) / this.scale
         const y = (e.clientY - rect.top) / this.scale
-        const loc = this.textMapper.lookup(i, x, y)
+        console.log(`[click] page=${i} x=${x.toFixed(1)} y=${y.toFixed(1)} scale=${this.scale}`)
+
+        let loc: SourceLocation | null = null
+        if (this.synctexData) {
+          loc = this.synctexParser.inverseLookup(this.synctexData, i, x, y)
+          console.log(`[click] synctex result:`, loc)
+        }
+        if (!loc) {
+          loc = this.textMapper.lookup(i, x, y)
+          console.log(`[click] text-mapper result:`, loc)
+        }
         if (loc) this.onInverseSearch(loc)
       })
       canvas.dataset.pageNum = String(i)
@@ -194,8 +213,17 @@ export class PdfViewer {
 
   /** Forward search: highlight a source location in the PDF */
   forwardSearch(file: string, line: number): void {
-    const loc = this.textMapper.forwardLookup(file, line)
+    let loc = this.synctexData
+      ? this.synctexParser.forwardLookup(this.synctexData, file, line)
+      : null
+    if (!loc) {
+      loc = this.textMapper.forwardLookup(file, line)
+    }
     if (!loc) return
+
+    console.log(
+      `[forward] line=${line} → page=${loc.page} x=${loc.x.toFixed(1)} y=${loc.y.toFixed(1)} w=${loc.width.toFixed(1)} h=${loc.height.toFixed(1)} (scaled: left=${(loc.x * this.scale).toFixed(0)}px top=${(loc.y * this.scale).toFixed(0)}px)`,
+    )
 
     // Find the page wrapper
     const pages = this.pagesContainer.querySelectorAll('.pdf-page-container')

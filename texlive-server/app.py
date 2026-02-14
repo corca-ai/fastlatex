@@ -18,7 +18,13 @@ def san(name):
 @cross_origin()
 def pdftex_fetch_file(fileformat, filename):
     filename = san(filename)
-    url = filename if filename == "swiftlatexpdftex.fmt" else pykpathsea_pdftex.find_file(filename, fileformat)
+    # Serve swiftlatexpdftex.fmt for any format file request — Ubuntu 20.04's
+    # pdflatex.fmt was built by pdfTeX 1.40.20 and is incompatible with the
+    # WASM binary (pdfTeX 1.40.22). The swiftlatexpdftex.fmt was built for 1.40.22.
+    if filename in ("swiftlatexpdftex.fmt", "pdflatex.fmt"):
+        url = "swiftlatexpdftex.fmt"
+    else:
+        url = pykpathsea_pdftex.find_file(filename, fileformat)
 
     if url is None or not os.path.isfile(url):
         return "File not found", 301

@@ -70,6 +70,7 @@ export class CompileScheduler {
           log: String(err),
           errors: [{ line: 0, message: String(err), severity: 'error' }],
           compileTime: 0,
+          synctex: null,
         })
       }
     } finally {

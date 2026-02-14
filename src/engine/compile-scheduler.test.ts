@@ -10,6 +10,7 @@ function makeResult(overrides?: Partial<CompileResult>): CompileResult {
     log: '',
     errors: [],
     compileTime: 100,
+    synctex: null,
     ...overrides,
   }
 }

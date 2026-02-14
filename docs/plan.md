@@ -438,66 +438,88 @@ pdf.js `getTextContent()` API로 PDF 텍스트 + 좌표를 추출하고,
 - [x] E2E 테스트: `e2e/inverse-search.spec.ts` — Cmd+click → editor still functional
 - [x] 커밋: `28e4ca0`
 
-### C. Phase 2 — WASM 재빌드 (SyncTeX 활성화)
+### C. Phase 2 — WASM 재빌드 (SyncTeX 활성화) ✅
 
-SwiftLaTeX `pdftex.wasm` 빌드에 SyncTeX 라이브러리를 추가.
-**주의:** WEB-to-C 재생성이 필요할 수 있음 (synctex 훅이 pdftex0.c에 없음).
+pdfTeX 1.40.21을 TeX Live 2020 소스에서 WASM으로 빌드. SyncTeX 포함.
+BusyTeX 프로젝트의 2-phase 빌드 방식 참조 (Phase 1: native web2c → C 생성, Phase 2: emcc WASM 컴파일).
 
-- [ ] 빌드 환경 구축
-  - Emscripten SDK 설치 (`emsdk`)
-  - SwiftLaTeX/pdftex.wasm 소스 클론
-  - 기존 바이너리와 동일한 결과 나오는지 빌드 테스트
-- [ ] TeX Live에서 synctex 소스 가져오기
-  - `texk/web2c/synctexdir/` — `synctex.c`, `synctex.h`, `synctex-common.h`
-  - `texk/web2c/synctexdir/synctex-e-tex.ch` (change file)
-- [ ] WEB-to-C 재생성 (synctex 훅 포함)
-  - `tie -c pdftex-final.ch pdftex.ch synctex-e-tex.ch` (change file 병합)
-  - `tangle pdftex.web pdftex-final.ch` → `pdftex.p`
-  - `web2c pdftex.p` → `pdftex0.c` (synctex 훅 포함)
-  - **대안:** pdftex0.c를 수동 패치 (synctex 훅 위치 특정 후 삽입)
-- [ ] Makefile 수정
-  - `TEXSOURCES`에 `synctexdir/synctex.c` 추가
-  - `-I synctexdir` 인클루드 경로 추가
-- [ ] `main.c` 수정: `_compile()`에 `synctexoption = 1` 추가
-- [ ] WASM 빌드 + 테스트
-  - `emmake make` → `swiftlatexpdftex.wasm` + `.js` 생성
-  - 기존 기능 회귀 테스트 (컴파일, 패키지 로드)
-  - `FS.readFile("main.synctex")` 또는 `.synctex.gz`로 SyncTeX 데이터 확인
-- [ ] Worker JS 수정: 컴파일 후 `.synctex` 파일 자동 읽어서 postMessage에 포함
-- [ ] `types.ts`: `CompileResult`에 `synctex: string | null` 필드 추가
-- [ ] `swiftlatex-engine.ts`: compile() 응답에서 synctex 데이터 추출
-- [ ] 검증: 컴파일 결과에 SyncTeX 데이터 포함 확인
+**빌드 파이프라인:** `wasm-build/` 디렉토리에 Docker 기반 빌드 환경 구축.
+- Phase 1 (native) Docker 이미지에 baked → 캐시 활용
+- Phase 2 (WASM) `docker run` 시 실행 → 스크립트 변경에 빠르게 대응
 
-### D. SyncTeX 파서 + 검색 로직
+- [x] 빌드 환경 구축
+  - `wasm-build/Dockerfile`: `emscripten/emsdk:3.1.46` 기반, TeX Live 2020 소스 클론
+  - Phase 1 (native configure + build) 인라인 → Docker layer cache 활용
+  - Phase 2 스크립트는 COPY 후 entrypoint로 실행
+- [x] TeX Live 2020 소스에서 SyncTeX 포함 빌드
+  - `--enable-synctex` configure 플래그
+  - `synctexdir/synctex.c` 직접 컴파일 + 28개 심볼 rename (`-D` defines, BusyTeX 참조)
+- [x] 2-phase 빌드 구현
+  - Phase 1: native `tangle`/`otangle`로 `pdftex0.c`, `pdftexini.c`, `pdftex-pool.c`, `pdftexd.h` 생성
+  - Phase 2: `emconfigure` + targeted library builds (kpathsea, zlib, libpng, xpdf) + `emcc` final link
+  - `wasm-entry.c`: custom entry points (`compileLaTeX`, `compileBibtex`, `compileFormat`, `setMainEntry`)
+  - `kpse-hook.c` + `library.js`: `--wrap=kpse_find_file` linker hook → JS network fallback
+- [x] Worker JS (`worker-template.js`): SyncTeX 데이터 추출 포함
+  - 컴파일 후 `.synctex` / `.synctex.gz` 읽어서 postMessage에 포함
+  - Transferable ArrayBuffer로 zero-copy 전송
+- [x] `types.ts`: `CompileResult.synctex: Uint8Array | null` 필드 추가
+- [x] `swiftlatex-engine.ts`: compile() 응답에서 synctex 데이터 추출
+- [x] 빌드 성공: `swiftlatexpdftex.js` (109KB) + `swiftlatexpdftex.wasm` (1.6MB)
+- [x] `strings` 검증: SyncTeX 심볼 바이너리에 포함 확인
+- [x] `public/swiftlatex/`에 배포
 
-LaTeX-Workshop의 TypeScript SyncTeX 파서 포팅 (MIT 라이선스).
-원본: `github.com/James-Yu/LaTeX-Workshop/src/locate/synctex/`
+**빌드 파일:**
 
-- [ ] `src/synctex/parser.ts`: SyncTeX 텍스트 파서 (~300줄)
-  - Node.js 의존성 제거 (fs, zlib, iconv → 브라우저 API)
-  - `.synctex.gz` 압축 해제: `DecompressionStream` API 또는 `pako`
-  - 파싱 결과: `PdfSyncObject { files, pages, blockNumberLine, offset }`
-- [ ] `src/synctex/types.ts`: 타입 정의
-  - `PdfSyncObject`, `SyncBlock`, `Rectangle`
-  - 좌표 단위: scaled points (sp) → pt 변환 (`1 pt = 65781.76 sp`)
-- [ ] `src/synctex/search.ts`: 검색 로직 (~100줄)
-  - `inverseLookup(page, x, y) → { file, line }` — 가장 가까운 블록 찾기
-  - `forwardLookup(file, line) → { page, x, y, w, h }` — 줄 → PDF 위치
-  - 거리 계산: containment-first 휴리스틱 (블록 내부 우선, 그 다음 중심 거리)
-- [ ] 단위 테스트: 샘플 `.synctex` 파일로 파싱 + 검색 검증
-- [ ] 검증: `npx vitest run`
+| 파일 | 역할 |
+|------|------|
+| `wasm-build/Dockerfile` | Emscripten + TeX Live 소스 + Phase 1 baked |
+| `wasm-build/Makefile` | 2-phase 빌드 오케스트레이션 |
+| `wasm-build/build.sh` | Docker entrypoint (Phase 2 only) |
+| `wasm-build/worker-template.js` | Worker JS with SyncTeX extraction |
+| `wasm-build/wasm-entry.c` | Custom WASM entry points |
+| `wasm-build/kpse-hook.c` | kpathsea → JS network fallback |
+| `wasm-build/library.js` | Emscripten JS library bridge |
 
-### E. Inverse Search UI (PDF 클릭 → 소스 점프)
+**빌드 명령:**
+```bash
+cd wasm-build
+docker build --platform linux/amd64 -t pdftex-wasm .    # Phase 1 (cached)
+docker run --platform linux/amd64 -v $(pwd)/dist:/dist pdftex-wasm  # Phase 2
+cp dist/swiftlatexpdftex.{js,wasm} ../public/swiftlatex/
+```
 
-Phase 2 SyncTeX 기반으로 Phase 1의 근사 방식을 교체.
+### D. SyncTeX 파서 + 검색 로직 ✅
 
-- [ ] `pdf-viewer.ts`: 클릭 핸들러 → SyncTeX inverseLookup 호출
-  - 캔버스 좌표 → PDF 좌표: `(clickX / (scale * dpr), pageHeight - clickY / (scale * dpr))`
-  - SyncTeX 좌표계: 원점 좌상단, Y축 아래 방향 (PDF와 동일)
-- [ ] `main.ts`: onInverseSearch 콜백 — `revealLine()` + 줄 하이라이트
-- [ ] Ctrl/Cmd+클릭으로 동작 (일반 클릭/텍스트 선택과 구분)
-- [ ] 시각적 피드백: 점프 후 해당 줄 2초간 하이라이트
-- [ ] 검증: E2E 테스트
+독자적 TypeScript SyncTeX 파서 구현 (파서 + 검색을 단일 클래스로 통합).
+
+- [x] `src/synctex/synctex-parser.ts`: SyncTeX 텍스트 파서 + 검색 (~390줄)
+  - `.synctex.gz` 압축 해제: 브라우저 `DecompressionStream` API
+  - Preamble 파싱: `Input:`, `Magnification:`, `Unit:`, `X Offset:`, `Y Offset:`
+  - Content 파싱: `{page`, `[vbox`, `(hbox`, `hvoid`, `xkern`, `gglue`, `$math` 등 8종 노드
+  - 좌표 변환: TeX sp → PDF pt (`value * unit * mag / 1000 / 65536 * 72 / 72.27`)
+  - `inverseLookup(page, x, y)`: containment-first 휴리스틱 (hbox 내부 → 가장 가까운 노드)
+  - `forwardLookup(file, line)`: 소스 위치 → PDF bbox (첫 페이지 우선)
+- [x] `SynctexData` 타입: `inputs: Map<number, string>`, `pages: Map<number, SynctexNode[]>`
+- [x] 단위 테스트: 24 tests (`src/synctex/synctex-parser.test.ts`)
+  - 파싱: preamble, inputs, nodes, 다중 페이지, 빈 데이터, void/kern/glue
+  - Inverse search: containment, nearest fallback, 빈 페이지
+  - Forward search: 정확 매칭, 미발견 파일/라인, filename suffix 매칭
+- [x] 검증: `npx vitest run` — 69 tests pass
+
+### E. Inverse/Forward Search UI (SyncTeX 통합) ✅
+
+Phase 2 SyncTeX 기반으로 Phase 1 텍스트 매퍼를 fallback으로 강등.
+
+- [x] `pdf-viewer.ts`: 클릭 핸들러 — synctex 우선, text-mapper fallback
+  - `inverseLookup(synctexData, page, x/scale, y/scale)` → SourceLocation
+  - synctex 실패 시 `textMapper.lookup()` fallback
+- [x] `pdf-viewer.ts`: forward search — synctex 우선, text-mapper fallback
+  - `forwardLookup(synctexData, file, line)` → PdfLocation
+  - 하이라이트 오버레이 2초 후 페이드아웃
+- [x] `main.ts`: compile 결과에서 synctex 데이터 파싱
+  - `synctexParser.parse(result.synctex)` → `pdfViewer.setSynctexData()`
+  - 파싱 실패 시 graceful fallback (텍스트 매퍼 사용)
+- [x] TypeScript 컴파일 통과, 69 tests pass
 
 ### F. Forward Search UI (소스 커서 → PDF 하이라이트) ✅
 
@@ -527,34 +549,40 @@ Phase 1 (텍스트 기반) 검증. Phase 2 (SyncTeX) 구현 후 정밀도 재측
 - [x] 버그 수정: forward search 키보드 핸들러 `{ capture: true }` — Monaco보다 먼저 이벤트 처리하여 newline 삽입 방지
 - [x] `window.__editor`, `window.__pdfViewer` 노출 (E2E 테스트용)
 - [x] 전체 14 E2E 테스트 통과, 45 단위 테스트 통과
-- [ ] 정확도 테스트: Phase 2 (SyncTeX) 후 정밀 측정 (95%+ 목표)
-- [ ] 성능 측정: Phase 2 후 점프 응답 시간 < 50ms 측정
+- [ ] E2E 검증: SyncTeX 데이터 생성 확인 (docker compose up → 컴파일 → synctex 데이터 확인)
+- [ ] 정확도 테스트: SyncTeX 기반 정밀 측정 (95%+ 목표)
+- [ ] 성능 측정: 점프 응답 시간 < 50ms 측정
 
-### 파일 변경 예상
+### 파일 변경 (완료)
 
-| 파일 | 작업 |
-|------|------|
-| `public/swiftlatex/swiftlatexpdftex.js` | readfile 명령 추가, synctex 반환 (Phase 2) |
-| `public/swiftlatex/swiftlatexpdftex.wasm` | SyncTeX 포함 재빌드 (Phase 2) |
-| `src/engine/tex-engine.ts` | `readFile()` 인터페이스 추가 |
-| `src/engine/swiftlatex-engine.ts` | `readFile()` 구현, synctex 데이터 추출 |
-| `src/types.ts` | `CompileResult.synctex` 필드 |
-| `src/synctex/text-mapper.ts` | 신규 — Phase 1 텍스트 기반 매핑 |
-| `src/synctex/parser.ts` | 신규 — SyncTeX 파서 (Phase 2) |
-| `src/synctex/search.ts` | 신규 — forward/inverse 검색 로직 |
-| `src/synctex/types.ts` | 신규 — SyncTeX 타입 정의 |
-| `src/viewer/pdf-viewer.ts` | 클릭 핸들러, 하이라이트 오버레이 |
-| `src/main.ts` | inverse/forward search 연결 |
-| `e2e/iteration3.spec.ts` | 신규 — E2E 검증 |
+| 파일 | 작업 | 상태 |
+|------|------|------|
+| `wasm-build/Dockerfile` | 빌드 환경 (Emscripten + TeX Live 2020) | ✅ |
+| `wasm-build/Makefile` | 2-phase 빌드 오케스트레이션 | ✅ |
+| `wasm-build/build.sh` | Docker entrypoint | ✅ |
+| `wasm-build/worker-template.js` | Worker JS with SyncTeX extraction | ✅ |
+| `wasm-build/wasm-entry.c` | Custom WASM entry points | ✅ |
+| `wasm-build/kpse-hook.c` | kpathsea → JS network fallback | ✅ |
+| `wasm-build/library.js` | Emscripten JS library bridge | ✅ |
+| `public/swiftlatex/swiftlatexpdftex.js` | 재빌드 (109KB) | ✅ |
+| `public/swiftlatex/swiftlatexpdftex.wasm` | SyncTeX 포함 재빌드 (1.6MB) | ✅ |
+| `src/synctex/synctex-parser.ts` | SyncTeX 파서 + 검색 (통합) | ✅ |
+| `src/synctex/synctex-parser.test.ts` | 24 unit tests | ✅ |
+| `src/synctex/text-mapper.ts` | Phase 1 텍스트 매핑 (fallback) | ✅ |
+| `src/engine/swiftlatex-engine.ts` | synctex 데이터 추출 | ✅ |
+| `src/types.ts` | `CompileResult.synctex` 필드 | ✅ |
+| `src/viewer/pdf-viewer.ts` | synctex 기반 inverse/forward search | ✅ |
+| `src/main.ts` | synctex 파싱 + fallback 통합 | ✅ |
 
-### 리스크 및 대안
+### 리스크 및 대안 (사후 분석)
 
-| 리스크 | 영향 | 대안 |
-|--------|------|------|
-| WEB-to-C 재생성 실패 (빌드 시스템 복잡도) | Phase 2 지연 | pdftex0.c 수동 패치 또는 Phase 1만으로 출시 |
-| Emscripten 버전 호환 문제 | WASM 빌드 실패 | SwiftLaTeX 원본과 동일 Emscripten 버전 사용 |
-| 포맷 파일 비호환 | 컴파일 실패 | SyncTeX 추가는 포맷 파일에 영향 없음 (런타임 기능) |
-| pdf.js 텍스트 추출 정확도 낮음 | Phase 1 UX 저하 | fuzzy matching + context window 확대 |
+| 리스크 | 결과 | 해결 방법 |
+|--------|------|-----------|
+| WEB-to-C 재생성 실패 | ✅ 해결 | 2-phase 빌드: Phase 1 native → C 생성, Phase 2 emcc 컴파일 |
+| Emscripten 버전 호환 | ✅ 해결 | emsdk 3.1.46 사용 (SwiftLaTeX 원본과 다르지만 호환) |
+| 포맷 파일 비호환 | ✅ 무관 | SyncTeX는 런타임 기능, 포맷 파일 변경 불필요 |
+| TeX Live recursive make 실패 | ✅ 해결 | targeted library builds (kpathsea, zlib, libpng, xpdf만 빌드) |
+| QEMU 에뮬레이션 느림 | ⚠️ 현재 | ARM Mac에서 x86_64 Docker: Phase 1 ~82분, Phase 2 ~30분. CI 이관 필요 |
 
 ---
 

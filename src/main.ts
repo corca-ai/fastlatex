@@ -3,6 +3,7 @@ import { createEditor, revealLine, setEditorContent } from './editor/setup'
 import { CompileScheduler } from './engine/compile-scheduler'
 import { SwiftLatexEngine } from './engine/swiftlatex-engine'
 import { VirtualFS } from './fs/virtual-fs'
+import { SynctexParser } from './synctex/synctex-parser'
 import type { AppStatus, CompileResult } from './types'
 import { ErrorLog } from './ui/error-log'
 import { FileTree } from './ui/file-tree'
@@ -16,6 +17,7 @@ let editor: Monaco.editor.IStandaloneCodeEditor
 
 // --- Components ---
 const engine = new SwiftLatexEngine()
+const synctexParser = new SynctexParser()
 const fs = new VirtualFS()
 const statusEl = document.getElementById('status')!
 
@@ -65,12 +67,43 @@ function onCompileResult(result: CompileResult): void {
   }
 
   if (result.success && result.pdf) {
-    // Update source content for inverse search
+    // Update source content for text-mapper fallback
     for (const path of fs.listFiles()) {
       const file = fs.getFile(path)
       if (file && typeof file.content === 'string') {
         pdfViewer.setSourceContent(path, file.content)
       }
+    }
+
+    // Parse SyncTeX data if available (preferred over text-mapper)
+    if (result.synctex) {
+      synctexParser
+        .parse(result.synctex)
+        .then((synctexData) => {
+          pdfViewer.setSynctexData(synctexData)
+          console.log(
+            `SyncTeX: ${synctexData.inputs.size} inputs, ` +
+              `${synctexData.pages.size} pages, ` +
+              `mag=${synctexData.magnification}, unit=${synctexData.unit}, ` +
+              `xOff=${synctexData.xOffset}, yOff=${synctexData.yOffset}`,
+          )
+          // Log sample nodes from page 1 for debugging
+          const p1 = synctexData.pages.get(1)
+          if (p1 && p1.length > 0) {
+            const sample = p1.slice(0, 5)
+            for (const n of sample) {
+              console.log(
+                `  [${n.type}] line=${n.line} h=${n.h.toFixed(1)} v=${n.v.toFixed(1)} w=${n.width.toFixed(1)} h=${n.height.toFixed(1)}`,
+              )
+            }
+          }
+        })
+        .catch((err) => {
+          console.warn('SyncTeX parse failed, using text-mapper fallback:', err)
+          pdfViewer.setSynctexData(null)
+        })
+    } else {
+      pdfViewer.setSynctexData(null)
     }
 
     setStatus('rendering')

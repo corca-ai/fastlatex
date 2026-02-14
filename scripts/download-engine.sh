@@ -5,7 +5,18 @@ DIR="$(cd "$(dirname "$0")/.." && pwd)"
 DEST="$DIR/public/swiftlatex"
 RELEASE_URL="https://github.com/SwiftLaTeX/SwiftLaTeX/releases/download/v20022022/20-02-2022.zip"
 
+WASM_BUILD="$DIR/wasm-build/dist"
+
 mkdir -p "$DEST"
+
+# Prefer locally-built WASM with SyncTeX support
+if [[ -f "$WASM_BUILD/swiftlatexpdftex.js" && -f "$WASM_BUILD/swiftlatexpdftex.wasm" ]]; then
+  echo "Using locally-built WASM binary (with SyncTeX support)..."
+  cp "$WASM_BUILD/swiftlatexpdftex.js" "$DEST/"
+  cp "$WASM_BUILD/swiftlatexpdftex.wasm" "$DEST/"
+  echo "Done."
+  exit 0
+fi
 
 if [[ -f "$DEST/swiftlatexpdftex.js" && -f "$DEST/swiftlatexpdftex.wasm" ]]; then
   echo "SwiftLaTeX engine already downloaded."
@@ -44,4 +55,18 @@ if ! grep -q '"readfile"' "$DEST/swiftlatexpdftex.js"; then
   echo "  readfile command: patched"
 else
   echo "  readfile command: already present"
+fi
+
+# Patch: include synctex data in compile response
+# After successful compilation, read the .synctex file from the WASM virtual filesystem
+# and include it in the response message. This enables PDF↔source synchronization.
+if ! grep -q 'synctex' "$DEST/swiftlatexpdftex.js"; then
+  # Find the compile success response and add synctex extraction before it
+  # Original: self.postMessage({result:"ok",cmd:"compile",pdf:pdfArrayBuffer,log:self.memlog})
+  # Patched:  ...reads synctex first, includes it in response
+  sed -i.bak 's/self\.postMessage({result:"ok",cmd:"compile",pdf:pdfArrayBuffer,log:self\.memlog})/var synctexData=null;try{var synctexPath=self.mainfile.replace(\/\\.tex$\//,".synctex");synctexData=FS.readFile(WORKROOT+"\/"+synctexPath,{encoding:"binary"})}catch(e){}self.postMessage({result:"ok",cmd:"compile",pdf:pdfArrayBuffer,synctex:synctexData,log:self.memlog})/' "$DEST/swiftlatexpdftex.js"
+  rm -f "$DEST/swiftlatexpdftex.js.bak"
+  echo "  synctex extraction: patched"
+else
+  echo "  synctex extraction: already present"
 fi

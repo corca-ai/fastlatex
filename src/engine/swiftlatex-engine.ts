@@ -84,9 +84,10 @@ export class SwiftLatexEngine implements TexEngine {
         const log: string = data.log || ''
         const success = data.result === 'ok'
         const pdf = success ? new Uint8Array(data.pdf) : null
+        const synctex = success && data.synctex ? new Uint8Array(data.synctex) : null
         const errors = parseTexErrors(log)
 
-        resolve({ success, pdf, log, errors, compileTime })
+        resolve({ success, pdf, log, errors, compileTime, synctex })
       }
 
       this.worker!.postMessage({ cmd: 'compilelatex' })
