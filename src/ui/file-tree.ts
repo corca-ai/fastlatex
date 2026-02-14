@@ -6,11 +6,7 @@ export class FileTree {
   private onSelect: (path: string) => void
   private fs: VirtualFS
 
-  constructor(
-    container: HTMLElement,
-    fs: VirtualFS,
-    onSelect: (path: string) => void,
-  ) {
+  constructor(container: HTMLElement, fs: VirtualFS, onSelect: (path: string) => void) {
     this.container = container
     this.fs = fs
     this.onSelect = onSelect
@@ -41,7 +37,7 @@ export class FileTree {
     const files = this.fs.listFiles()
     for (const path of files) {
       const item = document.createElement('div')
-      item.className = 'file-item' + (path === this.activeFile ? ' active' : '')
+      item.className = `file-item${path === this.activeFile ? ' active' : ''}`
       item.textContent = path
 
       item.onclick = () => {

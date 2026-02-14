@@ -1,13 +1,13 @@
-import { SwiftLatexEngine } from './engine/swiftlatex-engine'
-import { CompileScheduler } from './engine/compile-scheduler'
-import { createEditor, setEditorContent, revealLine } from './editor/setup'
-import { PdfViewer } from './viewer/pdf-viewer'
-import { VirtualFS } from './fs/virtual-fs'
-import { FileTree } from './ui/file-tree'
-import { ErrorLog } from './ui/error-log'
-import { setupDividers } from './ui/layout'
-import type { CompileResult, AppStatus } from './types'
 import type * as Monaco from 'monaco-editor'
+import { createEditor, revealLine, setEditorContent } from './editor/setup'
+import { CompileScheduler } from './engine/compile-scheduler'
+import { SwiftLatexEngine } from './engine/swiftlatex-engine'
+import { VirtualFS } from './fs/virtual-fs'
+import type { AppStatus, CompileResult } from './types'
+import { ErrorLog } from './ui/error-log'
+import { FileTree } from './ui/file-tree'
+import { setupDividers } from './ui/layout'
+import { PdfViewer } from './viewer/pdf-viewer'
 import './styles.css'
 
 // --- State ---
@@ -46,7 +46,7 @@ const errorLog = new ErrorLog(errorLogContainer, (line) => {
 function onCompileResult(result: CompileResult): void {
   console.log(
     `Compile: ${result.success ? 'OK' : 'FAIL'} in ${result.compileTime.toFixed(0)}ms, ` +
-    `${result.errors.length} error(s)`,
+      `${result.errors.length} error(s)`,
   )
   if (!result.success) {
     console.log('TeX log:', result.log)
@@ -98,7 +98,8 @@ function onFileSelect(path: string): void {
   currentFile = path
   const file = fs.getFile(path)
   if (file && editor) {
-    const content = typeof file.content === 'string' ? file.content : new TextDecoder().decode(file.content)
+    const content =
+      typeof file.content === 'string' ? file.content : new TextDecoder().decode(file.content)
     setEditorContent(editor, content, path.endsWith('.tex') ? 'latex' : 'plaintext')
 
     // Re-attach change handler since setEditorContent creates a new model
@@ -154,7 +155,9 @@ async function init(): Promise<void> {
     engine.writeFile('bench_small.tex', smallTex)
     engine.setMainFile('bench_small.tex')
     const benchResult = await engine.compile()
-    console.log(`Small doc compile: ${benchResult.compileTime.toFixed(0)}ms (success: ${benchResult.success})`)
+    console.log(
+      `Small doc compile: ${benchResult.compileTime.toFixed(0)}ms (success: ${benchResult.success})`,
+    )
     if (!benchResult.success) {
       console.log('Bench log:', benchResult.log)
     }
@@ -176,7 +179,9 @@ async function init(): Promise<void> {
     console.log(`Small doc < 5s: ${benchResult.compileTime < 5000 ? 'PASS' : 'FAIL'}`)
     if (benchResult.success && benchResult.pdf) {
       const renderCheck = await pdfViewer.render(benchResult.pdf)
-      console.log(`PDF render < 200ms/page: ${renderCheck < 200 ? 'PASS' : `FAIL (${renderCheck.toFixed(0)}ms)`}`)
+      console.log(
+        `PDF render < 200ms/page: ${renderCheck < 200 ? 'PASS' : `FAIL (${renderCheck.toFixed(0)}ms)`}`,
+      )
     }
   } catch (err) {
     console.error('Engine initialization failed:', err)

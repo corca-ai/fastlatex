@@ -1,0 +1,13 @@
+pre-commit:
+  parallel: true
+  commands:
+    typecheck:
+      run: npx tsgo --noEmit
+    lint:
+      run: npx biome check src/
+    test:
+      run: npx vitest run
+    ruff-check:
+      run: cd texlive-server && uvx ruff check .
+    ruff-format:
+      run: cd texlive-server && uvx ruff format --check .

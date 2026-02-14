@@ -30,7 +30,8 @@ export class ErrorLog {
 
     const toggleBtn = document.createElement('button')
     toggleBtn.textContent = this.container.classList.contains('open') ? 'Hide' : 'Show'
-    toggleBtn.style.cssText = 'background:none;border:none;color:#999;cursor:pointer;font-size:12px;'
+    toggleBtn.style.cssText =
+      'background:none;border:none;color:#999;cursor:pointer;font-size:12px;'
     toggleBtn.onclick = () => this.toggle()
     header.appendChild(toggleBtn)
 

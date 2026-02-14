@@ -1,5 +1,5 @@
-import type { TexEngine } from './tex-engine'
 import type { CompileResult } from '../types'
+import type { TexEngine } from './tex-engine'
 
 export class CompileScheduler {
   private debounceTimer: ReturnType<typeof setTimeout> | null = null

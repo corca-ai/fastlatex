@@ -1,0 +1,29 @@
+[project]
+name = "texlive-server"
+version = "0.1.0"
+description = "TexLive-Ondemand file server for SwiftLaTeX"
+requires-python = ">=3.14"
+dependencies = [
+  "flask",
+  "gevent",
+  "flask-cors",
+]
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+select = [
+  "E",   # pycodestyle errors
+  "W",   # pycodestyle warnings
+  "F",   # pyflakes
+  "I",   # isort
+  "N",   # pep8-naming
+  "UP",  # pyupgrade
+  "B",   # flake8-bugbear
+  "SIM", # flake8-simplify
+  "C901", # mccabe complexity
+]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10

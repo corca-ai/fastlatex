@@ -10,10 +10,9 @@ import { latexLanguage, latexLanguageConfig } from './latex-language'
         { type: 'module' },
       )
     }
-    return new Worker(
-      new URL('monaco-editor/esm/vs/editor/editor.worker.js', import.meta.url),
-      { type: 'module' },
-    )
+    return new Worker(new URL('monaco-editor/esm/vs/editor/editor.worker.js', import.meta.url), {
+      type: 'module',
+    })
   },
 }
 
@@ -61,10 +60,7 @@ export function setEditorContent(
   editor.setModel(newModel)
 }
 
-export function revealLine(
-  editor: monaco.editor.IStandaloneCodeEditor,
-  line: number,
-): void {
+export function revealLine(editor: monaco.editor.IStandaloneCodeEditor, line: number): void {
   editor.revealLineInCenter(line)
   editor.setPosition({ lineNumber: line, column: 1 })
   editor.focus()

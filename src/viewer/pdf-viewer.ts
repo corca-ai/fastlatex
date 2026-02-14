@@ -124,8 +124,9 @@ export class PdfViewer {
 
   private scrollToPage(page: number): void {
     const pages = this.pagesContainer.querySelectorAll('.pdf-page-container')
-    if (pages[page - 1]) {
-      pages[page - 1].scrollIntoView({ behavior: 'smooth' })
+    const target = pages[page - 1]
+    if (target) {
+      target.scrollIntoView({ behavior: 'smooth' })
     }
   }
 
