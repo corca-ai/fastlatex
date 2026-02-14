@@ -278,16 +278,80 @@ Tectonic WASM은 63% C 의존성(ICU4C/harfbuzz/freetype)으로 브라우저 WAS
 
 ## Iteration 2 (4주) — 체감 반응성 1차: cancel/debounce + 캐시
 
-**사용자 가치:** “실시간에 가깝다”는 첫 인상 (입력 중 버벅임 제거)
-
-* worker cancel(협조적 취소) + debounce 스케줄러
-* virtual FS 증분 업데이트(전체 복사 금지)
-* 패키지 캐시(Service Worker) + lazy fetch
-* “이전 PDF 유지 + 새 PDF 로딩되면 페이지 단위 교체” (완전 리로드 체감 감소)
+**사용자 가치:** "실시간에 가깝다"는 첫 인상 (입력 중 버벅임 제거)
 
 **KPI:** 타이핑 중 UI 끊김 0, 1–2초 내 갱신 체감
 
 **여기서 알파 출시 가능**
+
+### A. 컴파일 파이프라인 개선
+
+**현재 버그:** `syncAndCompile()`이 `engine.isReady()` 체크로 컴파일 중 파일 sync를 건너뜀.
+`writeFile()`도 `checkReady()`가 compiling 상태에서 throw. 결과: 컴파일 중 타이핑하면 변경사항 유실.
+
+WASM worker는 `_compileLaTeX()` 동기 실행 중 메시지 큐 차단 → 컴파일 후 처리됨.
+따라서 `writefile` postMessage를 컴파일 중 보내도 안전 (다음 컴파일 전에 처리됨).
+
+- [ ] `swiftlatex-engine.ts`: `writeFile()`/`mkdir()` — compiling 상태에서도 허용 (checkReady 완화)
+- [ ] `main.ts`: `syncAndCompile()` — `isReady()` 가드 제거, 컴파일 중에도 파일 sync
+- [ ] `compile-scheduler.ts`: 컴파일 세대(generation) 카운터 추가 — 낡은 결과 무시
+- [ ] `compile-scheduler.ts`: 적응형 debounce — 최근 컴파일 시간 기반 자동 조절
+  - `debounceMs = clamp(lastCompileTime * 0.5, 150, 1000)`
+  - 빠른 문서면 debounce 줄이고, 느린 문서면 늘림
+- [ ] `main.ts`: init()에서 벤치마크 코드 제거 — main.tex 직접 컴파일만 수행
+  - bench_small.tex 컴파일 + gate check → 별도 스크립트 또는 삭제
+- [ ] 단위 테스트: 적응형 debounce, generation 무시 로직
+
+**취소 전략:** SwiftLaTeX WASM worker에는 cancel 명령 없음 (`grace` = worker 종료만 가능).
+`worker.terminate()` + reinit는 ~46ms + 패키지 캐시 소실. 현실적 선택:
+- 작은 문서 (<1s): 컴파일 완료 후 결과 폐기 (generation 카운터)
+- 큰 문서 (>3s): terminate + reinit 고려 (Iteration 9에서 본격 대응)
+
+### B. Service Worker 패키지 캐시
+
+**현재:** 매 페이지 로드마다 패키지 재요청. WASM worker 내부 404 캐시만 존재.
+패키지 파일은 불변 (같은 이름 = 같은 내용) → cache-first 전략 적합.
+
+- [ ] `public/sw.js` 작성: `/texlive/` 요청 인터셉트
+  - 200 응답: CacheStorage에 저장 후 반환 (cache-first)
+  - 301 응답 (not found): 캐시하지 않음 (서버에 패키지 추가될 수 있음)
+  - 캐시 이름에 버전 포함 (`texlive-cache-v1`)
+- [ ] `main.ts`: engine init 전에 SW 등록 (`navigator.serviceWorker.register`)
+- [ ] SW lifecycle 처리: install (캐시 생성), activate (구버전 캐시 정리)
+- [ ] Vite dev 환경 호환: dev에서는 SW 비활성화 또는 network-first로 전환
+- [ ] 단위/E2E 테스트: 두 번째 로드 시 네트워크 요청 수 감소 확인
+
+### C. PDF 부드러운 교체 (no-flash update)
+
+**현재:** `render()`가 `pdfDoc.destroy()` + `innerHTML = ''` 후 새 페이지 렌더 → 빈 화면 깜빡임.
+
+- [ ] `pdf-viewer.ts`: 이중 버퍼 전략
+  - 새 PDF를 DocumentFragment(오프스크린)에 렌더
+  - 렌더 완료 후 `replaceChildren()`으로 한 번에 교체
+  - 교체 후 이전 pdfDoc destroy
+- [ ] 스크롤 위치 보존: 교체 전 `scrollTop` 저장 → 교체 후 복원
+- [ ] 페이지 수 변화 대응: 페이지 추가/제거 시 스크롤 위치 클램프
+- [ ] 렌더 중 재렌더 요청 처리: 새 요청이 오면 현재 렌더 취소 후 최신 데이터로 재시작
+
+### D. 정리 + 검증
+
+- [ ] E2E 테스트: 빠른 연속 타이핑 (50자+) → UI 끊김 없음 → 최종 PDF 정확
+- [ ] E2E 테스트: 컴파일 중 타이핑 → 변경사항이 최종 PDF에 반영됨
+- [ ] E2E 테스트: amsmath 사용 문서 두 번째 로드 시간 < 첫 번째 (SW 캐시)
+- [ ] 콘솔 성능 측정: 편집→PDF 갱신 총 시간 로깅
+- [ ] `docs/plan.md` 체크리스트 업데이트
+
+### 파일 변경 예상
+
+| 파일 | 작업 |
+|------|------|
+| `src/engine/swiftlatex-engine.ts` | writeFile/mkdir compiling 허용 |
+| `src/engine/compile-scheduler.ts` | generation 카운터, 적응형 debounce |
+| `src/engine/compile-scheduler.test.ts` | 새 로직 단위 테스트 추가 |
+| `src/main.ts` | syncAndCompile 수정, 벤치마크 제거, SW 등록 |
+| `src/viewer/pdf-viewer.ts` | 이중 버퍼, 스크롤 보존 |
+| `public/sw.js` | 신규 — Service Worker |
+| `e2e/iteration2.spec.ts` | 신규 — E2E 검증 |
 
 ---
 
