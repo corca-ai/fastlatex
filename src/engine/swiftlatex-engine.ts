@@ -2,7 +2,7 @@ import type { CompileResult, EngineStatus } from '../types'
 import { parseTexErrors } from './parse-errors'
 import type { TexEngine } from './tex-engine'
 
-const ENGINE_PATH = '/swiftlatex/swiftlatexpdftex.js'
+const ENGINE_PATH = `${import.meta.env.BASE_URL}swiftlatex/swiftlatexpdftex.js`
 
 export class SwiftLatexEngine implements TexEngine {
   private worker: Worker | null = null
@@ -48,7 +48,7 @@ export class SwiftLatexEngine implements TexEngine {
     // Set TexLive endpoint — proxied through Vite dev server (/texlive/ → texlive:5001)
     // Note: do NOT use PdfTeXEngine's setTexliveEndpoint() — it has a bug
     // that nullifies the worker reference after posting the message
-    const texliveUrl = this.texliveUrl ?? `${location.origin}/texlive/`
+    const texliveUrl = this.texliveUrl ?? `${location.origin}${import.meta.env.BASE_URL}texlive/`
     this.worker!.postMessage({ cmd: 'settexliveurl', url: texliveUrl })
   }
 

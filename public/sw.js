@@ -19,9 +19,10 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url)
+  const base = new URL(self.registration.scope).pathname
 
-  // Only intercept /texlive/ requests
-  if (!url.pathname.startsWith('/texlive/')) return
+  // Only intercept texlive requests (base-path aware)
+  if (!url.pathname.startsWith(`${base}texlive/`)) return
 
   event.respondWith(
     caches.open(CACHE_NAME).then((cache) =>

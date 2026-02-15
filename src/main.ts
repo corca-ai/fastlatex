@@ -246,7 +246,7 @@ initPerfOverlay()
 
 // --- Service Worker (texlive package cache) ---
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/sw.js').catch((err) => {
+  navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch((err) => {
     console.warn('SW registration failed:', err)
   })
 }
