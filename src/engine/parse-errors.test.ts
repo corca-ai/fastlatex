@@ -104,20 +104,16 @@ describe('parseTexErrors', () => {
     ])
   })
 
-  it('parses underfull vbox warning with line number on next line', () => {
+  it('ignores underfull warnings (rarely actionable)', () => {
     const log = [
       'Underfull \\vbox (badness 10000) has occurred while \\output is active',
       ' [] at line 42',
+      'Underfull \\hbox (badness 1215) in paragraph at lines 10--15',
+      ' [] ',
     ].join('\n')
 
     const errors = parseTexErrors(log)
-    expect(errors).toEqual([
-      {
-        line: 42,
-        message: 'Underfull \\vbox (badness 10000) has occurred while \\output is active',
-        severity: 'warning',
-      },
-    ])
+    expect(errors).toEqual([])
   })
 
   it('parses overfull hbox without line number', () => {

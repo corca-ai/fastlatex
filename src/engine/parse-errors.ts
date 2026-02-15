@@ -46,8 +46,8 @@ export function parseTexErrors(log: string): TexError[] {
       continue
     }
 
-    // Match "Overfull \hbox ..." or "Underfull \hbox ..." warnings
-    if (/^(Over|Under)full \\[hv]box .+/.test(line)) {
+    // Match "Overfull \hbox ..." warnings (skip Underfull — rarely actionable)
+    if (/^Overfull \\[hv]box .+/.test(line)) {
       errors.push({
         line: findBoxLineNumber(line, lines[i + 1] ?? ''),
         message: line,
