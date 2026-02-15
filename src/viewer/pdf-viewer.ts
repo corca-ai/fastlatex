@@ -3,6 +3,7 @@ import type { SynctexData } from '../synctex/synctex-parser'
 import { SynctexParser } from '../synctex/synctex-parser'
 import type { SourceLocation } from '../synctex/text-mapper'
 import { TextMapper } from '../synctex/text-mapper'
+import { PageRenderer } from './page-renderer'
 
 // Single shared worker instance — avoids re-fetching pdf.worker.mjs on every render
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
@@ -22,6 +23,8 @@ export class PdfViewer {
   private synctexParser = new SynctexParser()
   private onInverseSearch: ((loc: SourceLocation) => void) | null = null
   private pageObserver: IntersectionObserver | null = null
+  private pageRenderer = new PageRenderer()
+  private lastPdf: Uint8Array | null = null
 
   constructor(container: HTMLElement) {
     this.container = container
@@ -43,6 +46,11 @@ export class PdfViewer {
     this.synctexData = data
   }
 
+  /** Get the last rendered PDF data for download. */
+  getLastPdf(): Uint8Array | null {
+    return this.lastPdf
+  }
+
   private controlsEl!: HTMLElement
   private pageInfo!: HTMLSpanElement
   private pagesContainer!: HTMLElement
@@ -59,15 +67,34 @@ export class PdfViewer {
     zoomOut.textContent = '-'
     zoomOut.onclick = () => this.zoom(-0.25)
 
+    const zoomLabel = document.createElement('span')
+    zoomLabel.className = 'zoom-label'
+    zoomLabel.textContent = `${Math.round(this.scale * 100)}%`
+    zoomLabel.ondblclick = () => {
+      this.scale = 1.0
+      this.updateZoomLabel()
+      if (this.pdfDoc) {
+        const generation = ++this.renderGeneration
+        this.renderAllPages(generation)
+      }
+    }
+    this.zoomLabel = zoomLabel
+
     const zoomIn = document.createElement('button')
     zoomIn.textContent = '+'
     zoomIn.onclick = () => this.zoom(0.25)
 
-    this.controlsEl.append(this.pageInfo, zoomOut, zoomIn)
+    this.controlsEl.append(this.pageInfo, zoomOut, zoomLabel, zoomIn)
     this.container.appendChild(this.controlsEl)
 
     this.pagesContainer = document.createElement('div')
     this.container.appendChild(this.pagesContainer)
+  }
+
+  private zoomLabel!: HTMLSpanElement
+
+  private updateZoomLabel(): void {
+    this.zoomLabel.textContent = `${Math.round(this.scale * 100)}%`
   }
 
   async render(pdfData: Uint8Array): Promise<number> {
@@ -78,6 +105,7 @@ export class PdfViewer {
 
     // Copy the data so the original ArrayBuffer isn't detached by postMessage
     const data = pdfData.slice()
+    this.lastPdf = data
     this.pdfDoc = await pdfjsLib.getDocument({ data, worker: pdfWorker }).promise
 
     // Bail if a newer render was requested while loading
@@ -118,6 +146,10 @@ export class PdfViewer {
     const numPages = this.pdfDoc.numPages
     this.pageInfo.textContent = `Page ${this.currentPage} / ${numPages}`
 
+    // Collect old canvases for recycling
+    const oldCanvases = Array.from(this.pagesContainer.querySelectorAll('canvas'))
+    this.pageRenderer.recycle(oldCanvases as HTMLCanvasElement[])
+
     // Render into off-screen fragment
     const fragment = document.createDocumentFragment()
 
@@ -125,28 +157,12 @@ export class PdfViewer {
       // Bail if a newer render started
       if (generation !== this.renderGeneration) return
 
-      const page = await this.pdfDoc.getPage(i)
-      const viewport = page.getViewport({ scale: this.scale })
-
-      const wrapper = document.createElement('div')
-      wrapper.className = 'pdf-page-container'
-      wrapper.dataset.pageNum = String(i)
-
-      const canvas = document.createElement('canvas')
-      const dpr = window.devicePixelRatio || 1
-      canvas.width = Math.floor(viewport.width * dpr)
-      canvas.height = Math.floor(viewport.height * dpr)
-      canvas.style.width = `${viewport.width}px`
-      canvas.style.height = `${viewport.height}px`
-
-      const ctx = canvas.getContext('2d')!
-      ctx.scale(dpr, dpr)
-      await page.render({ canvasContext: ctx, viewport }).promise
+      const result = await this.pageRenderer.renderPage(this.pdfDoc, i, this.scale)
 
       // Click → inverse search (synctex first, text-mapper fallback)
-      canvas.addEventListener('click', (e) => {
+      result.canvas.addEventListener('click', (e) => {
         if (!this.onInverseSearch) return
-        const rect = canvas.getBoundingClientRect()
+        const rect = result.canvas.getBoundingClientRect()
         const x = (e.clientX - rect.left) / this.scale
         const y = (e.clientY - rect.top) / this.scale
 
@@ -160,8 +176,7 @@ export class PdfViewer {
         if (loc) this.onInverseSearch(loc)
       })
 
-      wrapper.appendChild(canvas)
-      fragment.appendChild(wrapper)
+      fragment.appendChild(result.wrapper)
     }
 
     // Final staleness check before DOM swap
@@ -204,6 +219,7 @@ export class PdfViewer {
 
   private zoom(delta: number): void {
     this.scale = Math.max(0.5, Math.min(3, this.scale + delta))
+    this.updateZoomLabel()
     if (this.pdfDoc) {
       const generation = ++this.renderGeneration
       this.renderAllPages(generation)
@@ -264,11 +280,13 @@ export class PdfViewer {
       this.pageObserver.disconnect()
       this.pageObserver = null
     }
+    this.pageRenderer.clearPool()
     this.pagesContainer.innerHTML = ''
     this.controlsEl.style.display = 'none'
     if (this.pdfDoc) {
       this.pdfDoc.destroy()
       this.pdfDoc = null
     }
+    this.lastPdf = null
   }
 }
