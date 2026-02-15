@@ -1,0 +1,51 @@
+name: WASM Build
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['wasm-build/**']
+
+jobs:
+  build-wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: actions/cache@v4
+        with:
+          path: /tmp/.buildx-cache
+          key: wasm-docker-${{ hashFiles('wasm-build/Dockerfile') }}
+          restore-keys: wasm-docker-
+
+      - name: Build Docker image (Phase 1 cached)
+        run: |
+          docker buildx build \
+            --platform linux/amd64 \
+            --load \
+            --cache-from type=local,src=/tmp/.buildx-cache \
+            --cache-to type=local,dest=/tmp/.buildx-cache-new,mode=max \
+            -t pdftex-wasm \
+            wasm-build/
+
+      - name: Run WASM build (Phase 2)
+        run: |
+          mkdir -p wasm-build/dist
+          docker run --platform linux/amd64 \
+            -v ${{ github.workspace }}/wasm-build/dist:/dist \
+            pdftex-wasm
+
+      - name: Rotate Docker cache
+        run: |
+          rm -rf /tmp/.buildx-cache
+          mv /tmp/.buildx-cache-new /tmp/.buildx-cache
+
+      - name: Upload WASM artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: wasm-binaries
+          path: |
+            wasm-build/dist/swiftlatexpdftex.js
+            wasm-build/dist/swiftlatexpdftex.wasm
+          retention-days: 90

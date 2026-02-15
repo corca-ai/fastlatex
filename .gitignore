@@ -1,8 +1,6 @@
 node_modules/
 dist/
-
-# SwiftLaTeX WASM binaries (downloaded via scripts/download-engine.sh)
-public/swiftlatex/
+bin/
 
 *.log
 
