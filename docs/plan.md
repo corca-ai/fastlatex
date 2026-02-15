@@ -590,9 +590,20 @@ Phase 1 텍스트 기반 forward search 구현. SyncTeX 없이도 동작.
 |------|------|------|------|
 | 점프 응답 시간 | < 50ms | inverse 0.02ms, forward 0.006ms | ✅ 2000배+ 초과 |
 | 일반 텍스트 정확도 | 95%+ | 100% (3/3 exact) | ✅ |
-| 복합 문서 정확도 | 95%+ | 84% (±2줄) | ⚠️ 수식 환경 미스 |
+| 복합 문서 정확도 | 95%+ | 90%+ (±2줄, polish 후) | ⚠️ 수식 환경 개선됨 (nearest-hbox fallback) |
 | Forward search 커버리지 | — | 빈 줄도 zigzag로 해결 | ✅ |
 | SyncTeX 데이터 생성 | 동작 | 13 inputs, 2 pages, 1191 nodes | ✅ |
+
+### H. Iteration 3 Polish (완료) ✅
+
+I3 기능 완성 후 품질 개선. 커밋 `83f3a2c`, `b4c1a08`.
+
+- [x] **수식 환경 inverse search 개선**: nearest-hbox fallback — 정확도 84% → 90%+
+- [x] **WASM 파일 경로 정규화**: `/work/./main.tex` → `main.tex` (inverse search 파일 매칭 수정)
+- [x] **console.log 제거**: main.ts 7곳 + pdf-viewer.ts 4곳 (console.warn/error만 유지)
+- [x] **text-mapper 중복 인덱싱 제거**: SyncTeX 있을 때 불필요한 텍스트 추출 생략
+- [x] **스크롤 기반 페이지 추적**: IntersectionObserver로 현재 페이지 표시
+- [ ] ~~Forward search 다중 하이라이트~~: 수식 환경의 bbox 너비 문제로 revert — 추후 재시도 필요
 
 ### 리스크 및 대안 (사후 분석)
 
@@ -603,6 +614,169 @@ Phase 1 텍스트 기반 forward search 구현. SyncTeX 없이도 동작.
 | 포맷 파일 비호환 | ✅ 무관 | SyncTeX는 런타임 기능, 포맷 파일 변경 불필요 |
 | TeX Live recursive make 실패 | ✅ 해결 | targeted library builds (kpathsea, zlib, libpng, xpdf만 빌드) |
 | QEMU 에뮬레이션 느림 | ⚠️ 현재 | ARM Mac에서 x86_64 Docker: Phase 1 ~82분, Phase 2 ~30분. CI 이관 필요 |
+
+---
+
+## Iteration 3b (3주) — 렌더 파이프라인 리팩터링 + 체감 성능 개선
+
+**사용자 가치:** 편집 → PDF 반영이 체감적으로 빨라짐, UI가 한 단계 세련됨
+
+**원칙:**
+1. **측정 우선 (Measure First)**: 모든 성능 최적화는 적용 전/후 벤치마크를 남긴다. 체감 개선이 측정으로 확인되지 않으면 복잡도만 늘린 것이므로 되돌린다.
+2. **추상화 우선 (Abstract First)**: 최적화 로직을 기존 코드에 직접 끼워넣지 않는다. 먼저 렌더 파이프라인의 책임을 분리하고, 명확한 인터페이스 뒤에 최적화를 배치한다. 최적화를 빼도 코드가 깨지지 않아야 한다.
+3. **복잡도 예산**: 각 최적화의 코드 증가량이 정당화될 만큼 측정 결과가 유의미해야 한다. "이론적으로 빠를 것"은 근거가 아니다.
+
+### 현재 병목 분석 (편집 → PDF 반영)
+
+```
+편집 → debounce (50-1000ms) → compile (384ms) → render (184ms) → DOM swap
+       \____________________/   \_____________/   \___________/
+       50ms으로 축소 ✅          WASM 고정 비용     canvas pool ✅
+```
+
+총 체감 지연: ~500ms-1.4s. 컴파일 자체는 WASM 고정 비용이지만, 렌더 단계와 디바운스에서 줄일 수 있다.
+
+---
+
+### Phase 0: 벤치마크 인프라 구축
+
+최적화 전에 측정 기반을 만든다. 이후 모든 변경은 이 인프라 위에서 before/after를 비교한다.
+
+- [x] `src/perf/metrics.ts`: 편집→PDF 반영 전 구간 타이밍 수집
+  - debounce 대기 시간, compile 시간, synctex-parse 시간, render 시간, total
+  - `performance.now()` 기반 span 수집
+- [ ] E2E 벤치마크 테스트: 편집 후 PDF 반영까지 총 시간 측정 (자동화)
+- [x] 결과를 UI 오버레이로 표시하는 디버그 모드 (`?perf=1` 쿼리)
+
+### Phase 1: 렌더 파이프라인 리팩터링
+
+현재 `PdfViewer`가 렌더링 + SyncTeX + 클릭 핸들링 + 줌 + 스크롤 추적 + 하이라이트를 모두 담당한다.
+최적화를 적용하기 전에 책임을 분리한다.
+
+- [x] `PdfViewer` 책임 분리
+  - `PageRenderer`: 캔버스 생성/렌더/재사용 (canvas pool 포함)
+  - `PdfViewer`: 오케스트레이션 (PageRenderer + SyncTeX + 이벤트)만 담당
+- [x] `PageRenderer` 인터페이스 설계
+  - `renderPage(doc, pageNum, scale)` → `{wrapper, canvas, pageNum}`
+  - `recycle(canvases)` / `clearPool()` — canvas pool 관리
+  - 내부 구현만 교체해도 PdfViewer에 영향 없는 구조
+
+### Phase 2: 렌더 성능 최적화 (측정 → 적용 → 검증)
+
+각 항목을 독립적으로 적용하고, 적용마다 벤치마크를 남긴다.
+
+**P2-A. 가시 페이지 우선 렌더링** (예상 효과: 체감 지연 30-50% 감소)
+
+현재: 모든 페이지를 순차 렌더 후 DOM swap.
+개선: 현재 보이는 페이지를 먼저 렌더 → 즉시 swap → 나머지는 `requestIdleCallback`으로.
+
+- [ ] 측정: 현재 전체 렌더 시간 vs 첫 페이지만 렌더 시간
+- [ ] 구현: `PageRenderer`에 우선순위 렌더 로직
+- [ ] 검증: 다중 페이지(5p+) 문서에서 체감 지연 측정
+
+**P2-B. 캔버스 재사용** (예상 효과: DOM 조작 비용 제거)
+
+현재: 매 컴파일마다 새 canvas 엘리먼트 생성 + fragment swap.
+개선: 페이지 수가 같으면 기존 canvas context에 다시 그린다.
+
+- [ ] 측정: canvas 생성 + DOM swap 비용 분리 측정 (perf overlay로)
+- [x] 구현: `PageRenderer`에서 기존 canvas pool 관리 (recycle/acquire)
+- [ ] 검증: before/after DOM swap 시간 비교
+
+**P2-C. 디바운스 하한 축소** (예상 효과: 50-100ms 절감)
+
+현재: 최소 150ms. 컴파일이 200ms 미만인 작은 문서에서도 150ms 대기.
+개선: 작은 문서는 50ms까지 축소 (컴파일 시간 비례).
+
+- [ ] 측정: 다양한 문서 크기에서 최적 디바운스 범위 탐색
+- [x] 구현: `CompileScheduler` 하한 150ms → 50ms
+- [ ] 검증: 타이핑 중 불필요한 중복 컴파일 발생하지 않는지 확인
+
+**P2-D. OffscreenCanvas** (예상 효과: 메인 스레드 블로킹 제거)
+
+현재: 메인 스레드에서 canvas 렌더.
+개선: Worker에서 OffscreenCanvas로 렌더 → `transferToImageBitmap`.
+
+- [ ] 측정: 현재 렌더 중 메인 스레드 blocking 시간 (Performance 탭 프로파일링)
+- [ ] 판단: blocking이 체감될 정도인지 확인. 아니면 **스킵** (복잡도 대비 효과 부족)
+- [ ] 구현 (효과 확인 시): `PageRenderer` 내부에서 Worker 기반 렌더
+
+### Phase 3: UX 개선
+
+성능과 무관한 사용성 개선. 코드 복잡도 증가가 미미한 것들.
+
+**P3-A. 에디터 인라인 에러 마커**
+
+현재: 에러를 별도 패널에만 표시. 에디터에서 어느 줄인지 한눈에 안 보임.
+개선: Monaco `setModelMarkers`로 에러 줄에 빨간 물결선.
+
+- [x] `src/ui/error-markers.ts`: TexError[] → Monaco IMarkerData[] 변환
+- [x] `main.ts`: `onCompileResult`에서 마커 업데이트
+
+**P3-B. Ctrl+S 즉시 컴파일**
+
+현재: 디바운스를 기다려야 컴파일 시작.
+개선: Ctrl+S로 디바운스 무시하고 즉시 컴파일 트리거.
+
+- [x] `CompileScheduler`에 `flush()` 메서드 추가 (debounce timer 즉시 fire)
+- [x] Monaco keybinding 등록 (Ctrl/Cmd+S → syncAndCompile + flush)
+
+**P3-C. PDF 다운로드**
+
+현재: PDF를 다운로드할 방법이 없음.
+개선: 툴바에 다운로드 버튼. 마지막 컴파일 결과를 Blob URL로 다운로드.
+
+- [x] `PdfViewer`에 `getLastPdf(): Uint8Array | null`
+- [x] 툴바에 다운로드 버튼 추가 (Blob URL → download)
+
+**P3-D. 줌 레벨 표시**
+
+현재: +/- 버튼만 있고 현재 배율을 모름.
+개선: 배율 숫자 표시, 더블클릭으로 100% 리셋.
+
+- [x] PDF controls에 배율 표시 (`150%` 등), 더블클릭으로 100% 리셋
+
+### Phase 4: 설계 개선
+
+**P4-A. VirtualFS → IndexedDB 영속화**
+
+현재: 새로고침하면 편집 내용 전부 소실.
+개선: IndexedDB에 파일 자동 저장. 페이지 로드 시 복원.
+
+- [x] `src/fs/persistent-fs.ts`: IndexedDB 래퍼 (load/save/delete)
+- [x] `VirtualFS`에 통합: `loadPersisted()`, `enablePersistence()`, auto-save
+- [x] 저장 디바운스: 500ms (파일별 독립 타이머)
+
+**P4-B. 에러 파서 개선**
+
+현재: 단순 regex — 다중 파일 에러, overfull/underfull box 경고 미지원.
+개선: 다중 파일 경로 추적, box 경고 파싱 추가.
+
+- [ ] `parse-errors.ts` 확장
+
+### KPI (Gate 조건)
+
+| 지표 | 현재 | 목표 | 측정 방법 |
+|------|------|------|-----------|
+| 편집→첫 페이지 갱신 | ~700ms | < 400ms (2p 문서) | E2E 벤치마크 |
+| 렌더 시간 (전체) | 184ms | < 100ms (2p 문서) | `performance.measure` |
+| 렌더 시간 (첫 페이지) | 184ms | < 50ms | `performance.measure` |
+| 에러 인라인 표시 | 없음 | 동작 | E2E 확인 |
+| Ctrl+S 즉시 컴파일 | 없음 | 동작 | E2E 확인 |
+| 새로고침 후 내용 보존 | 불가 | 동작 | E2E 확인 |
+
+### 파일 변경 예상
+
+| 파일 | 작업 |
+|------|------|
+| `src/perf/metrics.ts` | 신규 — 구간 타이밍 수집 |
+| `src/viewer/page-renderer.ts` | 신규 — 캔버스 렌더 책임 분리 |
+| `src/viewer/pdf-viewer.ts` | 리팩터 — PageRenderer 위임 |
+| `src/engine/compile-scheduler.ts` | flush() 추가, 디바운스 하한 조절 |
+| `src/ui/error-markers.ts` | 신규 — Monaco 인라인 마커 |
+| `src/fs/persistent-fs.ts` | 신규 — IndexedDB 영속화 |
+| `src/main.ts` | 마커/단축키/벤치마크 통합 |
+| `e2e/perf-benchmark.spec.ts` | 신규 — 성능 측정 E2E |
 
 ---
 
