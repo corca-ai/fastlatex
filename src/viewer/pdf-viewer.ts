@@ -177,9 +177,9 @@ export class PdfViewer {
     const fragment = document.createDocumentFragment()
     for (const w of wrappers) fragment.appendChild(w)
 
-    const scrollTop = this.pagesContainer.scrollTop
+    const scrollTop = this.container.scrollTop
     this.pagesContainer.replaceChildren(fragment)
-    this.pagesContainer.scrollTop = scrollTop
+    this.container.scrollTop = scrollTop
     this.observePages()
 
     // Phase 2: Render remaining pages in the background
@@ -237,7 +237,7 @@ export class PdfViewer {
           }
         }
       },
-      { root: this.pagesContainer, threshold: 0.5 },
+      { root: this.container, threshold: 0.5 },
     )
 
     for (const wrapper of this.pagesContainer.querySelectorAll('.pdf-page-container')) {
