@@ -75,11 +75,35 @@ async function main() {
 
   console.log(`\nCaptured ${captured.size} texlive files.`)
 
-  // Save files (skip .fmt which is handled separately)
+  // Non-English hyphenation files to skip — the .fmt already has all trie data baked in.
+  // These source .tex files are only needed during format building (done in Docker).
+  const KEEP_HYPH = new Set([
+    'hyph-en-us.tex', 'hyph-en-gb.tex',
+    'loadhyph-en-us.tex', 'loadhyph-en-gb.tex',
+    'hyphen.tex', 'hyphen.cfg', 'language.dat', 'dumyhyph.tex', 'zerohyph.tex',
+  ])
+
+  function isNonEnglishHyphenation(filename) {
+    if (KEEP_HYPH.has(filename)) return false
+    if (/^(hyph-|loadhyph-)/.test(filename)) return true
+    if (/^dehyph/.test(filename)) return true
+    if (/^conv-utf8-/.test(filename)) return true
+    if (/^(grahyph|grmhyph|grphyph|copthyph|ibyhyph)/.test(filename)) return true
+    if (/^(catkoi|catlcy|cyryoal|hypht2|koi2t2a|lcy2t2a|ukrhypmp|ruhyphen|ruhyphal|ukrhyph)/.test(filename)) return true
+    return false
+  }
+
+  // Save files (skip .fmt which is handled separately, and non-English hyphenation)
   let saved = 0
   let totalSize = 0
+  let skippedHyph = 0
   for (const [path, data] of captured) {
     if (path.endsWith('.fmt')) continue
+    const filename = path.split('/').pop()
+    if (isNonEnglishHyphenation(filename)) {
+      skippedHyph++
+      continue
+    }
     const outPath = join(bundleDir, path)
     mkdirSync(dirname(outPath), { recursive: true })
     writeFileSync(outPath, data)
@@ -88,6 +112,9 @@ async function main() {
   }
 
   console.log(`Saved ${saved} files (${(totalSize / 1024).toFixed(0)} KB) to public/texlive/`)
+  if (skippedHyph > 0) {
+    console.log(`Skipped ${skippedHyph} non-English hyphenation files`)
+  }
 
   await browser.close()
   await server.close()

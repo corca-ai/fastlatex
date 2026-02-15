@@ -11,21 +11,23 @@ Overleaf를 월등하게 이길 수 있는 LaTeX 편집/컴파일/프리뷰 컴�
 
 ---
 
+# Part I. 설계
+
 ## 1) 목표를 수치로 못 박기 (성공 조건)
 
 ### UX KPI (체감 성능)
 
 * **Keystroke → 화면 변화(무언가라도)**: 30–80ms (P50), 150ms (P95)
-* **Keystroke → “정확한 결과로 수렴”(권위 렌더)**: 300–1200ms (문서 크기에 따라)
+* **Keystroke → "정확한 결과로 수렴"(권위 렌더)**: 300–1200ms (문서 크기에 따라)
 * **PDF 클릭 → 소스 점프**: 50ms 이내
 * **스크롤/줌 FPS**: 60fps 유지(대부분의 장면)
-* **대형 문서(100p)**: “현재 페이지”는 200ms 내 업데이트, 전체는 비동기 수렴
+* **대형 문서(100p)**: "현재 페이지"는 200ms 내 업데이트, 전체는 비동기 수렴
 
-이 수치가 나오려면 “매번 PDF 전체 재생성+재파싱”만으로는 어렵습니다. 그래서 아래 아키텍처가 필요합니다.
+이 수치가 나오려면 "매번 PDF 전체 재생성+재파싱"만으로는 어렵습니다. 그래서 아래 아키텍처가 필요합니다.
 
 ---
 
-## 2) 제안 아키텍처: "권위(TeX) + 실시간(렌더러) 분리"가 핵심
+## 2) 아키텍처: "권위(TeX) + 실시간(렌더러) 분리"가 핵심
 
 ### 큰 그림
 
@@ -79,12 +81,11 @@ I0에서 Tectonic(Rust, XeTeX 기반)과 SwiftLaTeX pdfTeX WASM을 비교 평가
 
 이하 4가지는 모두 pdfTeX C 코드 수정 + Emscripten 재빌드로 구현 가능. I3의 빌드 파이프라인(`wasm-build/`)을 그대로 활용한다.
 
-#### (1) Preamble snapshot (성능 레버)
+#### (1) Preamble snapshot (성능 레버) — ✅ I4에서 구현
 
-* Emscripten `Module.HEAP`를 `ArrayBuffer.slice()`로 통째로 저장
-* preamble 처리 후 스냅샷 → body 편집 시 복원 후 재개
-* 대안: `\dump` primitive로 custom format 생성 (기존 `swiftlatexpdftex.fmt`도 이 방식)
-* 효과: 반복 편집의 80%는 preamble 변화 없음 → 컴파일 시간 절반 이하
+* ~~Emscripten `Module.HEAP`를 `ArrayBuffer.slice()`로 통째로 저장~~ → `\dump` primitive 방식 채택
+* preamble 처리 후 format 파일 생성 → body 편집 시 cached format 로드
+* 효과: 반복 편집 시 컴파일 ~40% 단축
 
 #### (2) Interruptible compilation
 
@@ -100,7 +101,7 @@ I0에서 Tectonic(Rust, XeTeX 기반)과 SwiftLaTeX pdfTeX WASM을 비교 평가
 * 장기적으로 WebGPU 렌더러의 입력 데이터로 사용
 * 효과: PDF.js 파싱/렌더 단계를 우회하여 즉시 화면 반영
 
-#### (4) Semantic Trace
+#### (4) Semantic Trace — 부분 완료 (I5a 정적 LSP, I5b 트레이스 예정)
 
 * 매크로 확장 시점에 구조화 이벤트 emit (label, ref, cite, section, include)
 * C 레벨 훅 또는 TeX 매크로 레벨 모두 가능
@@ -109,7 +110,7 @@ I0에서 Tectonic(Rust, XeTeX 기반)과 SwiftLaTeX pdfTeX WASM을 비교 평가
 
 ---
 
-## 4) GPU/WebGPU는 어디에 쓰는 게 “효과가 큰가”
+## 4) GPU/WebGPU는 어디에 쓰는 게 "효과가 큰가"
 
 ### (A) 가장 큰 효과: **렌더링**
 
@@ -121,7 +122,7 @@ I0에서 Tectonic(Rust, XeTeX 기반)과 SwiftLaTeX pdfTeX WASM을 비교 평가
   * 이미지: GPU 텍스처 캐시
   * 뷰포트/타일링: 화면에 보이는 부분만 그리기
 
-### (B) 타입세팅 계산 GPU 가속은 “연구 베팅”
+### (B) 타입세팅 계산 GPU 가속은 "연구 베팅"
 
 Knuth–Plass line breaking 같은 DP는 GPU로도 가능하지만, 구현/디버깅 대비 이득이 불확실합니다.
 현실적 우선순위는:
@@ -131,9 +132,9 @@ Knuth–Plass line breaking 같은 DP는 GPU로도 가능하지만, 구현/디�
 
 ---
 
-## 5) WebSocket을 “fallback” 이상의 무기로 쓰는 방법
+## 5) WebSocket을 "fallback" 이상의 무기로 쓰는 방법
 
-서버 fallback을 단순 “느리면 서버 컴파일”로 끝내지 말고:
+서버 fallback을 단순 "느리면 서버 컴파일"로 끝내지 말고:
 
 * WebSocket 채널로 서버가
 
@@ -152,7 +153,7 @@ Knuth–Plass line breaking 같은 DP는 GPU로도 가능하지만, 구현/디�
 
 ## 6) 패키지/재현성(Startup 제품에서 매우 중요)
 
-Whitelist 기반이면 “점진적 확장”을 제품적으로 운영 가능하게 만들어야 합니다.
+Whitelist 기반이면 "점진적 확장"을 제품적으로 운영 가능하게 만들어야 합니다.
 
 ### 제안: TeX용 lockfile + bundle registry
 
@@ -166,16 +167,29 @@ Whitelist 기반이면 “점진적 확장”을 제품적으로 운영 가능�
 
 이게 있으면:
 
-* “내 컴퓨터/네 컴퓨터에서 결과가 다름” 문제를 크게 줄이고,
+* "내 컴퓨터/네 컴퓨터에서 결과가 다름" 문제를 크게 줄이고,
 * 템플릿/학회 스타일 제공이 제품적으로 쉬워집니다.
 
 ---
 
-# 7) Iteration 단위 실행 계획 (2년 / 빠른 출시 / 매 Iteration 사용자 가치 상승)
+## 7) 이 설계의 차별점
 
-아래는 “주요 Iteration(릴리즈 단위)”입니다. 내부적으로는 2주 스프린트로 쪼개되, **각 Iteration 종료마다 사용자가 체감하는 가치가 분명히 증가**하도록 설계했습니다.
+1. **PDF를 최종 산출물로 유지하면서도**, 편집 중에는 **PDL+WebGPU로 '즉시 반응'**을 만든다.
+2. LSP의 정확도를 정적 분석에 맡기지 않고, **엔진 semantic trace로 끌어올린다.**
+3. VM snapshot/interruptible compilation처럼, **pdfTeX WASM을 제품 요구에 맞게 엔진 레벨로 변형**한다. (I3에서 검증된 빌드 파이프라인 활용)
+4. **이원 엔진 전략**: WASM(pdfTeX, 빠르고 가벼움)으로 90%+ 커버, 서버(full TeX Live)로 100% 커버. 사용자는 차이를 의식하지 않음.
+5. WebSocket fallback을 단순 백업이 아니라 **협업/빌드팜으로 확장 가능한 코어**로 설계한다.
+6. whitelist를 "기술 제한"이 아니라 **프로파일/락파일/재현성**으로 제품화한다.
 
-## Iteration 0 (2주) — 리스크 제거 스파이크
+---
+
+# Part II. 완료된 Iteration
+
+각 Iteration 종료마다 사용자가 체감하는 가치가 분명히 증가하도록 설계했다.
+
+---
+
+## Iteration 0 (2주) — 리스크 제거 스파이크 ✅
 
 **사용자 가치:** 없음(내부)
 **목표:** 이후 6개월의 성공 확률을 좌우하는 실험을 끝낸다.
@@ -205,7 +219,7 @@ Tectonic WASM은 63% C 의존성(ICU4C/harfbuzz/freetype)으로 브라우저 WAS
 
 ### 해결한 기술 장벽
 
-- [x] Format 호환성: WASM은 pdfTeX 1.40.21, Ubuntu 20.04는 1.40.20 — 포맷 재빌드 불가. 해결: 레포 원본 format 사용
+- [x] Format 호환성: WASM은 pdfTeX 1.40.22 (재빌드 후 확정), Ubuntu 20.04는 1.40.20 — 포맷 재빌드 불가. 해결: 레포 원본 format 사용
 - [x] l3backend 버전 체크: 2020-era l3backend는 버전 체크 없어 2020-02-14 format과 호환
 - [x] PDF 해상도: devicePixelRatio 적용 (Retina 대응)
 - [x] ArrayBuffer detach: PDF 데이터 `.slice()` 복사로 재사용 가능
@@ -214,11 +228,11 @@ Tectonic WASM은 63% C 의존성(ICU4C/harfbuzz/freetype)으로 브라우저 WAS
 
 ---
 
-## Iteration 1 (4주) — MVP: 브라우저 로컬 컴파일/뷰
+## Iteration 1 (4주) — MVP: 브라우저 로컬 컴파일/뷰 ✅
 
 **사용자 가치:** 설치 없이 브라우저에서 논문 템플릿 컴파일/미리보기
 
-### 진행 상태
+<details><summary>상세 체크리스트</summary>
 
 **프로젝트 스캐폴딩:**
 - [x] `package.json` (monaco-editor, pdfjs-dist, vite, typescript)
@@ -263,19 +277,18 @@ Tectonic WASM은 63% C 의존성(ICU4C/harfbuzz/freetype)으로 브라우저 WAS
 - [x] TeX 에러 → error log 표시 + 라인 점프 확인 (E2E 자동 검증 통과)
 - [x] amsmath 등 추가 패키지 컴파일 확인 (texlive 서버 경유 — E2E 자동 검증 통과)
 
-**KPI:** 작은 문서 기준 "편집→PDF 갱신" 2–5초라도 일단 동작
+</details>
+
+**KPI:** 작은 문서 기준 "편집→PDF 갱신" 2–5초라도 일단 동작 ✅
 
 ---
 
-## Iteration 2 (4주) — 체감 반응성 1차: cancel/debounce + 캐시
+## Iteration 2 (4주) — 체감 반응성 1차 ✅
 
 **사용자 가치:** "실시간에 가깝다"는 첫 인상 (입력 중 버벅임 제거)
-
 **KPI:** 타이핑 중 UI 끊김 0, 1–2초 내 갱신 체감
 
-**여기서 알파 출시 가능**
-
-### A. 컴파일 파이프라인 개선
+<details><summary>A. 컴파일 파이프라인 개선</summary>
 
 **현재 버그:** `syncAndCompile()`이 `engine.isReady()` 체크로 컴파일 중 파일 sync를 건너뜀.
 `writeFile()`도 `checkReady()`가 compiling 상태에서 throw. 결과: 컴파일 중 타이핑하면 변경사항 유실.
@@ -286,178 +299,97 @@ WASM worker는 `_compileLaTeX()` 동기 실행 중 메시지 큐 차단 → 컴�
 **A-1. writeFile/mkdir compiling 허용** ✅
 - [x] `swiftlatex-engine.ts`: checkReady → checkInitialized (ready|compiling 허용)
 - [x] `swiftlatex-engine.ts`: compile() 전용 checkReady는 유지 (이중 컴파일 방지)
-- [x] 검증: `npx tsgo --noEmit && npx vitest run`
 
 **A-2. syncAndCompile 수정** ✅
 - [x] `main.ts`: `syncAndCompile()` — `isReady()` 가드를 `getStatus()` 상태 체크로 교체
 - [x] `main.ts`: 엔진 미초기화 시에만 bail, compiling 중에는 파일 sync + schedule 허용
-- [x] 검증: `npx tsgo --noEmit`
 
 **A-3. 컴파일 세대(generation) 카운터** ✅
 - [x] `compile-scheduler.ts`: `generation` 카운터 — schedule()마다 증가
 - [x] `compile-scheduler.ts`: compile 시작 시 generation 캡처, 완료 시 최신 아닌 결과면 onResult 생략
 - [x] 단위 테스트: 구세대 결과 무시, 최신 결과만 전달
-- [x] 검증: `npx vitest run` (35 tests pass)
 
 **A-4. 적응형 debounce** ✅
 - [x] `compile-scheduler.ts`: 최근 컴파일 시간 추적, debounce 자동 조절
   - `debounceMs = clamp(lastCompileTime * 0.5, 150, 1000)`
-- [x] 단위 테스트: 컴파일 시간에 따라 debounce 변화 확인 (4 tests)
-- [x] 검증: `npx vitest run`
 
-**A-5. init() 벤치마크 제거** ✅
-- [x] `main.ts`: 벤치마크 코드 없음 확인, main.tex 직접 컴파일만
-- [x] 검증: `npx tsgo --noEmit && npx biome check src/`
-
-**A-6. 통합 검증** ✅
-- [x] 전체 체크: `npx tsgo --noEmit && npx biome check src/ && npx vitest run` — 35 tests pass
-
-**취소 전략:** SwiftLaTeX WASM worker에는 cancel 명령 없음 (`grace` = worker 종료만 가능).
-`worker.terminate()` + reinit는 ~46ms + 패키지 캐시 소실. 현실적 선택:
+**취소 전략:** SwiftLaTeX WASM worker에는 cancel 명령 없음.
 - 작은 문서 (<1s): 컴파일 완료 후 결과 폐기 (generation 카운터)
-- 큰 문서 (>3s): terminate + reinit 고려 (Iteration 9에서 본격 대응)
+- 큰 문서 (>3s): terminate + reinit 고려 (후속 iteration에서 대응)
 
-### B. Service Worker 패키지 캐시
+</details>
 
-**현재:** 매 페이지 로드마다 패키지 재요청. WASM worker 내부 404 캐시만 존재.
-패키지 파일은 불변 (같은 이름 = 같은 내용) → cache-first 전략 적합.
+<details><summary>B. Service Worker 패키지 캐시</summary>
 
 - [x] `public/sw.js` 작성: `/texlive/` 요청 인터셉트
   - 200 응답: CacheStorage에 저장 후 반환 (cache-first)
   - 301 응답 (not found): 캐시하지 않음
   - 캐시 이름에 버전 포함 (`texlive-cache-v1`)
 - [x] `main.ts`: engine init 전에 SW 등록 (`navigator.serviceWorker.register`)
-- [x] SW lifecycle 처리: install (`skipWaiting`), activate (구버전 캐시 정리 + `clients.claim`)
-- [x] Vite dev 호환: SW는 Vite proxy와 독립 동작 (proxy 응답을 캐시)
 - [x] E2E 테스트: 두 번째 로드 시 37/37 texlive 요청 SW 캐시에서 서빙 확인
 
-### C. PDF 부드러운 교체 (no-flash update) ✅
+</details>
 
-**현재:** `render()`가 `pdfDoc.destroy()` + `innerHTML = ''` 후 새 페이지 렌더 → 빈 화면 깜빡임.
+<details><summary>C. PDF 부드러운 교체 (no-flash update)</summary>
 
 - [x] `pdf-viewer.ts`: 이중 버퍼 전략
   - 새 PDF를 DocumentFragment(오프스크린)에 렌더
   - 렌더 완료 후 `replaceChildren()`으로 한 번에 교체
   - 교체 후 이전 pdfDoc destroy
 - [x] 스크롤 위치 보존: 교체 전 `scrollTop` 저장 → 교체 후 복원
-- [x] 페이지 수 변화 대응: `currentPage` 클램프
 - [x] 렌더 중 재렌더 요청 처리: `renderGeneration` 카운터로 stale 렌더 취소
 
-### D. 정리 + 검증 ✅
+</details>
+
+<details><summary>D. 검증</summary>
 
 - [x] E2E 테스트: 빠른 연속 타이핑 (50자+) → UI 끊김 없음 → 최종 PDF 정확
 - [x] E2E 테스트: 컴파일 중 타이핑 → 변경사항이 최종 PDF에 반영됨
 - [x] E2E 테스트: SW 캐시 — 두 번째 로드 시 37/37 texlive 요청 캐시 서빙
 - [x] E2E 테스트: PDF 이중 버퍼 — MutationObserver로 컨테이너 비워짐 없음 확인
-- [x] 콘솔 성능 측정: 기존 로깅 유지 (Engine load, Compile, PDF render)
-- [x] `docs/plan.md` 체크리스트 업데이트
 
-### 파일 변경 예상
-
-| 파일 | 작업 |
-|------|------|
-| `src/engine/swiftlatex-engine.ts` | writeFile/mkdir compiling 허용 |
-| `src/engine/compile-scheduler.ts` | generation 카운터, 적응형 debounce |
-| `src/engine/compile-scheduler.test.ts` | 새 로직 단위 테스트 추가 |
-| `src/main.ts` | syncAndCompile 수정, 벤치마크 제거, SW 등록 |
-| `src/viewer/pdf-viewer.ts` | 이중 버퍼, 스크롤 보존 |
-| `public/sw.js` | 신규 — Service Worker |
-| `e2e/iteration2.spec.ts` | 신규 — E2E 검증 |
+</details>
 
 ---
 
-## Iteration 3 (4주) — SyncTeX: PDF 클릭 ↔ 소스 점프
+## Iteration 3 (4주) — SyncTeX: PDF 클릭 ↔ 소스 점프 ✅
 
 **사용자 가치:** 생산성 급상승(편집-결과 왕복 비용이 사라짐)
-
 **KPI:** 점프 50ms 내, 정확도(대부분의 텍스트) 95%+
 
-**이 시점에 "초기 제품"으로 공개 베타가 가능**
-
-### 기술 현황 분석
-
-**SyncTeX 상태:** SwiftLaTeX WASM 바이너리에서 SyncTeX 코드 **완전 제거**.
-- `strings swiftlatexpdftex.wasm | grep synctex` → 0건
-- `pdftex0.c`, `pdftexini.c`에 synctex 참조 없음 (WEB-to-C 변환 시 제외)
-- `pdftexcoerce.h`에 `#include <synctexdir/synctex.h>` 잔존하나 실제 디렉토리 없음
-- `\synctex=1` TeX primitive도 동작 불가 (바이너리에 코드 자체가 없음)
-
-**Source specials 상태:** 바이너리에 `src:`, `src:%d` 문자열 존재.
-- `makesrcspecial()` 코드가 컴파일됨
-- 단, PDF 모드에서 `src:` specials는 무시됨 (DVI 전용) → 사용 불가
-
-**Worker 프로토콜:** 파일 읽기 명령 없음 (write만 가능). compile 결과로 PDF + log만 반환.
-WASM FS에서 `FS.readFile()`은 가능 (PDF 읽기에 이미 사용 중).
-
-**결론:** WASM 재빌드가 필수. 2-phase 접근:
-- Phase 1: pdf.js 텍스트 추출 기반 **근사** inverse search (WASM 변경 없이 즉시 가능)
-- Phase 2: WASM 재빌드 + SyncTeX로 **정밀** 양방향 검색
-
----
-
-### A. Worker 프로토콜 확장 (`readfile` 명령) ✅
-
-SyncTeX든 텍스트 기반이든 WASM FS에서 파일을 읽어올 수 있어야 한다.
-Phase 2에서 `.synctex` 파일 읽기에 필수, Phase 1에서도 `.aux` 등 디버깅에 유용.
+<details><summary>A. Worker 프로토콜 확장 (`readfile` 명령)</summary>
 
 - [x] `swiftlatexpdftex.js` (worker): `readfile` 명령 추가
-  - WASM 파일은 gitignored → `scripts/download-engine.sh`에 패치 스크립트 추가
 - [x] `tex-engine.ts`: `readFile(path: string): Promise<string | null>` 인터페이스 추가
 - [x] `swiftlatex-engine.ts`: `readFile()` 구현 — worker에 `readfile` postMessage + 응답 대기
-- [x] `main.ts`: `window.__engine`으로 E2E 테스트에 노출
-- [x] E2E 검증: 컴파일 후 `readFile('main.log')` → TeX 로그 반환 확인
-- [x] 커밋: `dc0bdda`
 
-### B. Phase 1 — pdf.js 텍스트 기반 inverse search (WASM 변경 없음) ✅
+</details>
+
+<details><summary>B. Phase 1 — pdf.js 텍스트 기반 inverse search (WASM 변경 없음)</summary>
 
 pdf.js `getTextContent()` API로 PDF 텍스트 + 좌표를 추출하고,
 소스 텍스트와 매칭하여 **줄 번호를 역산출**하는 근사 방식.
 정확도 ~80-90% (일반 텍스트), 수식/표는 매핑 불가.
 
 - [x] `src/synctex/text-mapper.ts` 생성: PDF 텍스트 ↔ 소스 매핑
-  - `indexPage()`: `page.getTextContent()` → TextBlock[] (text, x, y, width, height)
-  - `lookup()`: 가장 가까운 TextBlock 찾기 → 소스 텍스트 매칭 → 줄 번호 반환
-  - `setSource()`: 다중 소스 파일 등록, `findInSources()`: 전체 소스 검색
-  - 정확 매칭 + 부분 매칭 (10+ chars prefix) 지원
-- [x] `src/viewer/pdf-viewer.ts`: Cmd/Ctrl+클릭 핸들러
-  - 캔버스 좌표 → PDF 좌표(pt): `x / scale`, `y / scale`
-  - `textMapper.lookup()` → `onInverseSearch` 콜백
-  - 컴파일 후 전체 페이지 텍스트 인덱싱 (`textMapper.indexPage()`)
-- [x] `src/main.ts`: `pdfViewer.setInverseSearchHandler()` → `revealLine()` 연결
-  - `onCompileResult`에서 모든 FS 파일을 `setSourceContent()`로 등록
-- [x] 단위 테스트: 7 tests (index+lookup, empty page, not found, closest block, partial match, clear, multi-file)
-- [x] E2E 테스트: `e2e/inverse-search.spec.ts` — Cmd+click → editor still functional
-- [x] 커밋: `28e4ca0`
+- [x] `src/viewer/pdf-viewer.ts`: 클릭 핸들러 (캔버스 좌표 → PDF 좌표)
+- [x] `src/main.ts`: inverse search → `revealLine()` 연결
+- [x] 단위 테스트 7개, E2E 테스트 1개
 
-### C. Phase 2 — WASM 재빌드 (SyncTeX 활성화) ✅
+</details>
 
-pdfTeX 1.40.21을 TeX Live 2020 소스에서 WASM으로 빌드. SyncTeX 포함.
-BusyTeX 프로젝트의 2-phase 빌드 방식 참조 (Phase 1: native web2c → C 생성, Phase 2: emcc WASM 컴파일).
+<details><summary>C. Phase 2 — WASM 재빌드 (SyncTeX 활성화)</summary>
+
+pdfTeX 1.40.22를 TeX Live 2020 소스에서 WASM으로 빌드. SyncTeX 포함.
+BusyTeX 프로젝트의 2-phase 빌드 방식 참조.
 
 **빌드 파이프라인:** `wasm-build/` 디렉토리에 Docker 기반 빌드 환경 구축.
-- Phase 1 (native) Docker 이미지에 baked → 캐시 활용
-- Phase 2 (WASM) `docker run` 시 실행 → 스크립트 변경에 빠르게 대응
 
-- [x] 빌드 환경 구축
-  - `wasm-build/Dockerfile`: `emscripten/emsdk:3.1.46` 기반, TeX Live 2020 소스 클론
-  - Phase 1 (native configure + build) 인라인 → Docker layer cache 활용
-  - Phase 2 스크립트는 COPY 후 entrypoint로 실행
-- [x] TeX Live 2020 소스에서 SyncTeX 포함 빌드
-  - `--enable-synctex` configure 플래그
-  - `synctexdir/synctex.c` 직접 컴파일 + 28개 심볼 rename (`-D` defines, BusyTeX 참조)
-- [x] 2-phase 빌드 구현
-  - Phase 1: native `tangle`/`otangle`로 `pdftex0.c`, `pdftexini.c`, `pdftex-pool.c`, `pdftexd.h` 생성
-  - Phase 2: `emconfigure` + targeted library builds (kpathsea, zlib, libpng, xpdf) + `emcc` final link
-  - `wasm-entry.c`: custom entry points (`compileLaTeX`, `compileBibtex`, `compileFormat`, `setMainEntry`)
-  - `kpse-hook.c` + `library.js`: `--wrap=kpse_find_file` linker hook → JS network fallback
+- [x] `wasm-build/Dockerfile`: `emscripten/emsdk:3.1.46` 기반, TeX Live 2020 소스 클론
+- [x] TeX Live 2020 소스에서 SyncTeX 포함 빌드 (`--enable-synctex`, 28개 심볼 rename)
+- [x] 2-phase 빌드: Phase 1 native (tangle → C 생성), Phase 2 emcc (WASM 컴파일)
 - [x] Worker JS (`worker-template.js`): SyncTeX 데이터 추출 포함
-  - 컴파일 후 `.synctex` / `.synctex.gz` 읽어서 postMessage에 포함
-  - Transferable ArrayBuffer로 zero-copy 전송
-- [x] `types.ts`: `CompileResult.synctex: Uint8Array | null` 필드 추가
-- [x] `swiftlatex-engine.ts`: compile() 응답에서 synctex 데이터 추출
 - [x] 빌드 성공: `swiftlatexpdftex.js` (109KB) + `swiftlatexpdftex.wasm` (1.6MB)
-- [x] `strings` 검증: SyncTeX 심볼 바이너리에 포함 확인
-- [x] `public/swiftlatex/`에 배포
 
 **빌드 파일:**
 
@@ -479,151 +411,62 @@ docker run --platform linux/amd64 -v $(pwd)/dist:/dist pdftex-wasm  # Phase 2
 cp dist/swiftlatexpdftex.{js,wasm} ../public/swiftlatex/
 ```
 
-### D. SyncTeX 파서 + 검색 로직 ✅
+</details>
+
+<details><summary>D. SyncTeX 파서 + 검색 로직</summary>
 
 참조 C 구현(`synctex_parser.c`, Jérôme Laurens) 알고리즘을 충실히 포팅한 트리 기반 파서.
 
 - [x] `src/synctex/synctex-parser.ts`: 참조 알고리즘 포팅 (~840줄)
   - `.synctex.gz` 압축 해제: 브라우저 `DecompressionStream` API
-  - Preamble 파싱: `Input:`, `Magnification:`, `Unit:`, `X Offset:`, `Y Offset:`
-  - Content 파싱: `{page`, `[vbox`, `(hbox`, `hvoid`, `xkern`, `gglue`, `$math` 등 8종 노드
-  - **트리 구조**: 스택 기반 파싱으로 `parent`/`children` 포인터 구축
-  - **friend index**: `"tag:line"` → nodes 맵으로 O(1) forward lookup
-  - 좌표 변환: TeX sp → PDF pt (`value * unit * mag / 1000 / 65536 * 72 / 72.27`)
-  - **inverse search** (참조: `synctex_iterator_new_edit`):
-    hbox 스캔 → smallest container → deepest container DFS → L/R bracketing → pickBestLR
-  - **forward search** (참조: `synctex_iterator_new_display`):
-    nearest-line zigzag (±100 tries) → non-box first pass → leaf→ancestor hbox resolution
-  - **L1 (Manhattan) distance**: `hOrderedDistance`, `vOrderedDistance`, `pointNodeDistance`, `distToBox`
-  - kern 노드 특수 거리 계산, 등거리 시 non-kern 우선
-- [x] `SynctexData` 타입: `inputs`, `pages`, `pageRoots`, `friendIndex`
-- [x] 단위 테스트: 31 tests (`src/synctex/synctex-parser.test.ts`)
-  - 파싱: preamble, inputs, nodes, 다중 페이지, 빈 데이터, void/kern/glue
-  - 트리 구조: parent-child 관계, friend index 내용 검증
-  - Inverse search: containment, L/R bracketing, nearest fallback, 빈 페이지, 자식 노드 라인 반환
-  - Forward search: 정확 매칭, 미발견 파일/라인, suffix 매칭, leaf→ancestor hbox 해소
-- [x] 검증: `npx vitest run` — 76 tests pass
+  - 트리 구조: 스택 기반 파싱, parent/children 포인터, friend index
+  - inverse search: hbox 스캔 → smallest/deepest container → L/R bracketing
+  - forward search: nearest-line zigzag → leaf→ancestor hbox resolution
+- [x] 단위 테스트: 31 tests
 
-### E. Inverse/Forward Search UI (SyncTeX 통합) ✅
+</details>
 
-Phase 2 SyncTeX 기반으로 Phase 1 텍스트 매퍼를 fallback으로 강등.
+<details><summary>E–F. Inverse/Forward Search UI</summary>
 
-- [x] `pdf-viewer.ts`: 클릭 핸들러 — synctex 우선, text-mapper fallback
-  - `inverseLookup(synctexData, page, x/scale, y/scale)` → SourceLocation
-  - synctex 실패 시 `textMapper.lookup()` fallback
-- [x] `pdf-viewer.ts`: forward search — synctex 우선, text-mapper fallback
-  - `forwardLookup(synctexData, file, line)` → PdfLocation
-  - 하이라이트 오버레이 2초 후 페이드아웃
-- [x] `main.ts`: compile 결과에서 synctex 데이터 파싱
-  - `synctexParser.parse(result.synctex)` → `pdfViewer.setSynctexData()`
-  - 파싱 실패 시 graceful fallback (텍스트 매퍼 사용)
-- [x] TypeScript 컴파일 통과, 69 tests pass
-
-### F. Forward Search UI (소스 커서 → PDF 하이라이트) ✅
-
-Phase 1 텍스트 기반 forward search 구현. SyncTeX 없이도 동작.
-
+- [x] `pdf-viewer.ts`: synctex 우선, text-mapper fallback
+- [x] `pdf-viewer.ts`: forward search — 하이라이트 오버레이 2초 후 페이드아웃
+- [x] `main.ts`: Cmd/Ctrl+Enter → forward search 연결
 - [x] `text-mapper.ts`: `forwardLookup(file, line)` → `PdfLocation | null`
-  - `extractTextFragments()`: TeX 명령어 제거, 3+ chars 조각 추출
-  - 전체 페이지 블록에서 매칭 텍스트 검색
-- [x] `pdf-viewer.ts`: `forwardSearch(file, line)` 메서드
-  - `textMapper.forwardLookup()` → 해당 페이지 찾기
-  - 반투명 노란색 하이라이트 오버레이 (`rgba(255, 200, 0, 0.3)`)
-  - 해당 페이지로 `scrollIntoView({ behavior: 'smooth', block: 'center' })`
-  - 2초 후 페이드아웃 (CSS transition + setTimeout)
-  - 이전 하이라이트 자동 제거
-- [x] `main.ts`: Cmd/Ctrl+Enter → `pdfViewer.forwardSearch(currentFile, line)` 연결
-- [x] 단위 테스트: 3 tests (forward lookup, TeX-only lines → null, unknown file → null)
-- [x] 커밋: `86bd3d2`
 
-### G. 검증 + KPI ✅
+</details>
 
-- [x] E2E 테스트: PDF Cmd+클릭 → 소스 점프 (앱 정상 동작 확인)
-- [x] E2E 테스트: Cmd+Enter → PDF 하이라이트 표시 + 2초 후 페이드아웃
-- [x] E2E 테스트: 다중 파일 (`\input{chapter1}`) 시 Cmd+클릭 동작
-- [x] E2E 테스트: `readFile('main.log')` → TeX 로그 반환
-- [x] 버그 수정: forward search 키보드 핸들러 `{ capture: true }` — Monaco보다 먼저 이벤트 처리하여 newline 삽입 방지
-- [x] `window.__editor`, `window.__pdfViewer` 노출 (E2E 테스트용)
-- [x] 전체 19 E2E 테스트 통과, 76 단위 테스트 통과
-- [x] 참조 알고리즘 포팅 (synctex_parser.c → TypeScript): 31 parser tests pass
-- [x] PDFWorker 재사용 — 편집마다 `pdf.worker.mjs` 재요청 제거
-- [x] 데모 문서 업그레이드: 2단 레이아웃, 다중 페이지, 수학 섹션 6개 (SyncTeX 테스트용)
-- [x] E2E 검증: SyncTeX 데이터 생성 확인 — 13 inputs, 2 pages, 1191 nodes (page 1)
-- [x] 정확도 테스트: 일반 텍스트 100%, 복합 문서(2단+수식) 84% (±2줄), 수식 환경이 주 미스 원인
-- [x] 성능 측정: inverse 0.02ms, forward 0.006ms (KPI 50ms 대비 **2000배+** 빠름)
+<details><summary>G–H. 검증 + Polish</summary>
 
-### 파일 변경 (완료)
+- [x] 정확도: 일반 텍스트 100%, 복합 문서 90%+ (nearest-hbox fallback)
+- [x] 성능: inverse 0.02ms, forward 0.006ms (KPI 50ms 대비 **2000배+** 빠름)
+- [x] SyncTeX 데이터 생성: 13 inputs, 2 pages, 1191 nodes
+- [x] WASM 파일 경로 정규화: `/work/./main.tex` → `main.tex`
+- [x] 스크롤 기반 페이지 추적: IntersectionObserver
 
-| 파일 | 작업 | 상태 |
-|------|------|------|
-| `wasm-build/Dockerfile` | 빌드 환경 (Emscripten + TeX Live 2020) | ✅ |
-| `wasm-build/Makefile` | 2-phase 빌드 오케스트레이션 | ✅ |
-| `wasm-build/build.sh` | Docker entrypoint | ✅ |
-| `wasm-build/worker-template.js` | Worker JS with SyncTeX extraction | ✅ |
-| `wasm-build/wasm-entry.c` | Custom WASM entry points | ✅ |
-| `wasm-build/kpse-hook.c` | kpathsea → JS network fallback | ✅ |
-| `wasm-build/library.js` | Emscripten JS library bridge | ✅ |
-| `public/swiftlatex/swiftlatexpdftex.js` | 재빌드 (109KB) | ✅ |
-| `public/swiftlatex/swiftlatexpdftex.wasm` | SyncTeX 포함 재빌드 (1.6MB) | ✅ |
-| `src/synctex/synctex-parser.ts` | 참조 알고리즘 포팅 (~840줄, 트리 기반) | ✅ |
-| `src/synctex/synctex-parser.test.ts` | 31 unit tests | ✅ |
-| `src/synctex/text-mapper.ts` | Phase 1 텍스트 매핑 (fallback) | ✅ |
-| `src/engine/swiftlatex-engine.ts` | synctex 데이터 추출 | ✅ |
-| `src/types.ts` | `CompileResult.synctex` 필드 | ✅ |
-| `src/viewer/pdf-viewer.ts` | synctex 기반 inverse/forward search | ✅ |
-| `src/main.ts` | synctex 파싱 + fallback 통합 | ✅ |
-| `src/fs/virtual-fs.ts` | 2단 다중 페이지 수학 데모 문서 | ✅ |
-| `e2e/synctex-e2e.spec.ts` | SyncTeX E2E: 데이터생성/정확도/성능 (5 tests) | ✅ |
-
-### KPI 달성 현황
-
-| 지표 | 목표 | 실측 | 상태 |
-|------|------|------|------|
-| 점프 응답 시간 | < 50ms | inverse 0.02ms, forward 0.006ms | ✅ 2000배+ 초과 |
-| 일반 텍스트 정확도 | 95%+ | 100% (3/3 exact) | ✅ |
-| 복합 문서 정확도 | 95%+ | 90%+ (±2줄, polish 후) | ⚠️ 수식 환경 개선됨 (nearest-hbox fallback) |
-| Forward search 커버리지 | — | 빈 줄도 zigzag로 해결 | ✅ |
-| SyncTeX 데이터 생성 | 동작 | 13 inputs, 2 pages, 1191 nodes | ✅ |
-
-### H. Iteration 3 Polish (완료) ✅
-
-I3 기능 완성 후 품질 개선. 커밋 `83f3a2c`, `b4c1a08`.
-
-- [x] **수식 환경 inverse search 개선**: nearest-hbox fallback — 정확도 84% → 90%+
-- [x] **WASM 파일 경로 정규화**: `/work/./main.tex` → `main.tex` (inverse search 파일 매칭 수정)
-- [x] **console.log 제거**: main.ts 7곳 + pdf-viewer.ts 4곳 (console.warn/error만 유지)
-- [x] **text-mapper 중복 인덱싱 제거**: SyncTeX 있을 때 불필요한 텍스트 추출 생략
-- [x] **스크롤 기반 페이지 추적**: IntersectionObserver로 현재 페이지 표시
-- [ ] ~~Forward search 다중 하이라이트~~: 수식 환경의 bbox 너비 문제로 revert — 추후 재시도 필요
+</details>
 
 ### 리스크 및 대안 (사후 분석)
 
 | 리스크 | 결과 | 해결 방법 |
 |--------|------|-----------|
 | WEB-to-C 재생성 실패 | ✅ 해결 | 2-phase 빌드: Phase 1 native → C 생성, Phase 2 emcc 컴파일 |
-| Emscripten 버전 호환 | ✅ 해결 | emsdk 3.1.46 사용 (SwiftLaTeX 원본과 다르지만 호환) |
-| 포맷 파일 비호환 | ✅ 무관 | SyncTeX는 런타임 기능, 포맷 파일 변경 불필요 |
+| Emscripten 버전 호환 | ✅ 해결 | emsdk 3.1.46 사용 |
 | TeX Live recursive make 실패 | ✅ 해결 | targeted library builds (kpathsea, zlib, libpng, xpdf만 빌드) |
 | QEMU 에뮬레이션 느림 | ⚠️ 현재 | ARM Mac에서 x86_64 Docker: Phase 1 ~82분, Phase 2 ~30분. CI 이관 필요 |
 
 ---
 
-## Iteration 3b — 렌더 파이프라인 리팩터링 + 체감 성능 개선 ✅
+## Iteration 3b — 렌더 파이프라인 리팩터링 + UX ✅
 
 **사용자 가치:** 편집 → PDF 반영이 체감적으로 빨라짐, UI가 한 단계 세련됨
 
-**원칙:**
-1. **측정 우선 (Measure First)**: 모든 성능 최적화는 적용 전/후 벤치마크를 남긴다.
-2. **추상화 우선 (Abstract First)**: 최적화 로직을 기존 코드에 직접 끼워넣지 않는다. 먼저 책임을 분리하고 인터페이스 뒤에 배치한다.
-3. **복잡도 예산**: 측정 결과가 유의미하지 않으면 되돌린다.
-
-### 완료 항목
+<details><summary>완료 항목</summary>
 
 **인프라**
 - [x] `src/perf/metrics.ts`: span 기반 타이밍 수집 + `?perf=1` 디버그 오버레이
 - [x] `e2e/perf-benchmark.spec.ts`: 편집→PDF 사이클 + 엔진 로드 시간 E2E 벤치마크
 
-**렌더 파이프라인 리팩터링**
+**렌더 파이프라인**
 - [x] `src/viewer/page-renderer.ts`: 캔버스 렌더 책임 분리 (canvas pool: recycle/acquire)
 - [x] `src/viewer/pdf-viewer.ts`: PageRenderer 위임 + 가시 페이지 우선 렌더링
 - [x] IntersectionObserver 기반 스크롤 페이지 추적 + 스크롤 위치 보존
@@ -631,79 +474,195 @@ I3 기능 완성 후 품질 개선. 커밋 `83f3a2c`, `b4c1a08`.
 **성능 최적화**
 - [x] 가시 페이지 우선 렌더링: 현재 페이지 먼저 렌더 + DOM swap → 나머지 순차
 - [x] 캔버스 풀: `PageRenderer`에서 canvas 재사용 (DOM 생성 비용 절감)
-- [x] 디바운스 하한 150ms → 50ms (적응형, `compileTime * 0.5`로 조절)
+- [x] 디바운스 하한 150ms → 50ms (적응형)
 - [x] `CompileScheduler.flush()`: Ctrl+S로 디바운스 즉시 소화
 
 **UX 개선**
 - [x] 에디터 인라인 에러 마커: `src/ui/error-markers.ts` (Monaco `setModelMarkers`)
-- [x] Ctrl/Cmd+S 즉시 컴파일 (Monaco `addAction` keybinding)
-- [x] PDF 다운로드 버튼 (툴바, Blob URL)
+- [x] Ctrl/Cmd+S 즉시 컴파일
+- [x] PDF 다운로드 버튼
 - [x] 줌 레벨 % 표시 + 더블클릭 100% 리셋
 
-**설계 개선**
-- [x] 에러 파서: overfull/underfull box 경고 파싱 + 헬퍼 함수 추출로 복잡도 개선
+</details>
 
-### 스킵/연기 항목
+---
 
-- **OffscreenCanvas**: 가시 페이지 우선 렌더링으로 첫 페이지 체감이 충분히 빨라짐. 복잡도 대비 효과 부족으로 스킵. 50p+ 문서에서 재평가.
-- **성능 측정/검증**: `?perf=1` 오버레이와 E2E 벤치마크가 준비됨. Docker 환경에서 실제 before/after 측정은 별도 세션에서 수행.
-- **Forward search 다중 하이라이트**: 수식 환경 bbox 너비 문제로 I3 polish 때 revert. 추후 재시도.
+## Iteration 3c — CI/CD + gh-pages 배포 ✅
 
-### 결과 파일
+**사용자 가치:** 설치 없이 `https://akcorca.github.io/latex-editor/`에서 에디터 사용 가능
 
-| 파일 | 상태 |
+<details><summary>완료 항목</summary>
+
+**GitHub Actions CI**
+- [x] `.github/workflows/ci.yml`: lint → tsgo → test → vite build → gh-pages deploy
+- [x] `.github/workflows/wasm-build.yml`: Docker 기반 WASM 빌드 (x86_64)
+
+**gh-pages 정적 배포 호환**
+- [x] **Base path**: `import.meta.env.BASE_URL`로 모든 정적 자산 경로 수정
+- [x] **Format 파일 호환**: SyncTeX WASM 바이너리(1.40.22)용 `.fmt` 추출 (Playwright 자동화)
+- [x] **TeX 파일 번들링**: 277개 필수 파일 (13MB) — `scripts/bundle-texlive.mjs`
+- [x] **kpse 정적 호스팅 대응**: `fileid`/`pkid` 헤더 없는 환경 + 404 캐싱
+- [x] **Service Worker**: base-path-aware fetch 핸들러
+
+</details>
+
+**배포 현황:**
+- **URL**: `https://akcorca.github.io/latex-editor/`
+- **정적 자산**: WASM 1.6MB + worker 132KB + .fmt 2.3MB + texlive 13MB ≈ **17MB total**
+- **제약**: 번들에 포함된 패키지만 사용 가능 (article, amsmath, amssymb, amsthm + 의존성)
+
+---
+
+## Iteration 4 — Preamble Snapshot ✅
+
+**사용자 가치:** body 편집 시 컴파일 ~40% 빠름 (preamble 재처리 생략)
+
+**접근법:** C 코드 변경 없이, TeX의 `\dump` primitive로 preamble 상태를 format 파일로 캐싱.
+`\begin{document}` 앞의 preamble을 `-ini` 모드로 빌드 → `.fmt` 파일 생성.
+이후 body 편집 시 cached format을 로드하여 preamble 처리를 완전 건너뜀.
+
+- [x] **Worker**: `extractPreamble()`, `simpleHash()`, `buildPreambleFormat()` — preamble 분석 + format 빌드
+- [x] **Worker**: HIT/MISS 로직 — hash 비교로 preamble 변경 감지, 자동 fallback
+- [x] **Worker**: SyncTeX 라인 보존 — body 파일에 `%` 주석줄 패딩
+- [x] **Host**: `CompileResult.preambleSnapshot` 플래그, 상태바 "(cached preamble)" 표시
+- [x] **Tests**: preamble-utils 단위 테스트 10개, E2E 테스트 3개
+
+### 벤치마크
+
+| 항목 | 시간 |
 |------|------|
-| `src/perf/metrics.ts` | 신규 |
-| `src/viewer/page-renderer.ts` | 신규 |
-| `src/ui/error-markers.ts` | 신규 |
-| `e2e/perf-benchmark.spec.ts` | 신규 |
-| `src/viewer/pdf-viewer.ts` | 리팩터 (PageRenderer 위임, 가시 우선 렌더) |
-| `src/engine/compile-scheduler.ts` | 확장 (flush, perf marks) |
-| `src/engine/parse-errors.ts` | 확장 (box 경고, 헬퍼 추출) |
-| `src/fs/virtual-fs.ts` | 확장 |
-| `src/main.ts` | 통합 (마커, 단축키, PDF 다운로드) |
+| Preamble format 빌드 (MISS, 1회) | 198ms |
+| Body 컴파일 (HIT, cold) | 441ms |
+| Body 컴파일 (HIT, warm) | 258–302ms |
+| 추정 full 컴파일 (preamble 없이) | ~460ms |
+| **체감 개선** | **~40% 빠름** |
 
-### KPI
+### 제약 사항 (해소됨)
 
-| 지표 | I3b 이전 | I3b 목표 | 상태 |
-|------|----------|----------|------|
-| 에러 인라인 표시 | 없음 | 동작 | ✅ |
-| Ctrl+S 즉시 컴파일 | 없음 | 동작 | ✅ |
-| 렌더 시간 (첫 페이지) | ~184ms | < 50ms | 구현 완료, 측정 대기 |
-| 편집→첫 페이지 갱신 | ~700ms | < 400ms | 구현 완료, 측정 대기 |
+- ~~Preamble format은 **첫 컴파일 시에만** 빌드 가능~~ → `runMain()` 전환으로 해결 (I4c, 커밋 `33df703`)
+- 모든 컴파일이 `runMain()` → `_main()` 경유. `_mainCallSafe` 게이트 제거로 세션 중 preamble 재빌드 가능.
 
 ---
 
-## Iteration 4 (6주) — Preamble snapshot + 컴파일 성능
+## Iteration 4b — 컴포넌트 API + 라이브러리 빌드 ✅
 
-**사용자 가치:** "편집할 때마다 기다리는 시간이 절반으로 줄었다"
+**사용자 가치:** 호스트 제품에 `<script>` 한 줄로 LaTeX 에디터 임베드 가능
 
-pdfTeX WASM C 코드 수정 + Emscripten 재빌드 (I3 빌드 파이프라인 활용).
-
-* Emscripten WASM linear memory snapshot: preamble 처리 후 `Module.HEAP` 저장 → body 편집 시 복원
-* 캐시 키: preamble hash + package list
-* idle time에 예열 컴파일 (speculative warm-up)
-* 폰트/하이픈 패턴 로딩 캐시 강화
-
-**KPI:** 일반 논문(10-20p) 반복 편집 시 컴파일 시간 2-5x 개선
+- [x] `src/latex-editor.ts`: `LatexEditor` 클래스 (533줄) — `init()`, `loadProject()`, `saveProject()`, `compile()`, 이벤트 시스템
+- [x] `src/index.ts`: 라이브러리 엔트리포인트 (LatexEditor + 타입 export)
+- [x] `vite.config.ts`: `BUILD_MODE=lib` → Vite library mode (ES module 출력)
+- [x] `examples/embed.html`: 최소 임베딩 예시
+- [x] CSS를 ID 셀렉터에서 scoped `.le-*` 클래스로 전환 (임베딩 안전성)
 
 ---
 
-## Iteration 5 (8주) — Semantic Trace + LSP
+## Iteration 4c — 컴파일 흐름 수정 + WASM 버그 수정 ✅
 
-**사용자 가치:** "LaTeX가 IDE처럼 — 자동완성, 정확한 진단, go-to-definition"
+**사용자 가치:** 세션 중 preamble 변경해도 format 재빌드 동작, 반복 컴파일 안정성
 
-pdfTeX C 코드에 semantic trace 훅 추가 (매크로 확장 시점에 이벤트 emit).
+### `runMain()` 전환 (커밋 `33df703`)
+- [x] 모든 컴파일을 `runMain()` → `_main()` 경유로 통일
+- [x] `_mainCallSafe` 게이트 제거 → 세션 중 preamble format 재빌드 가능
+- [x] Monaco 모델 dispose 순서 수정 (Delayer cancellation error 방지)
 
-* 엔진 트레이스: labels/refs/cites/sections/includes를 구조화 이벤트로 스트리밍
-* LSP 기능: cite/label 자동완성, go-to-definition, find references, 구조 outline
+### WASM heap restore 버그 수정 (커밋 `4fcba76`)
+- [x] `restoreHeapMemory()`: `memory.grow()` 확장 영역에 스테일 데이터 잔존
+- [x] 증상: "Command already defined" / "Can be used only in preamble" / "text input levels=15"
+- [x] 수정: `dst.fill(0, self.initmem.length)` — 확장 영역 제로 초기화
+
+### 기타 polish
+- [x] IndexedDB 제거 — 컴포넌트는 stateless, 호스트가 저장 담당 (설계 확정)
+- [x] 자동 재컴파일: "Rerun to get cross-references right" 감지 시 자동 재실행
+- [x] 데모 문서를 7페이지 수학 서베이로 교체
+- [x] PDF 뷰어 로딩 오버레이 (Loading engine → Compiling → Rendering PDF)
+
+---
+
+## Iteration 5a — 정적 LaTeX LSP ✅
+
+**사용자 가치:** IDE 수준의 자동완성, go-to-definition, hover, 문서 outline, find references
+
+엔진 트레이스 없이 정적 분석(regex 기반)으로 구현. 브라우저에서 완전히 동작.
+
+- [x] `src/lsp/latex-parser.ts`: regex 기반 LaTeX 파서
+- [x] `src/lsp/aux-parser.ts`: `.aux` 파일 파서 (크로스 레퍼런스)
+- [x] `src/lsp/completion-provider.ts`: 컨텍스트 인식 자동완성 (~150 명령어, ~40 환경, `\ref`/`\cite`/`\begin`/`\usepackage`/`\input`)
+- [x] `src/lsp/definition-provider.ts`: 크로스 파일 go-to-definition
+- [x] `src/lsp/hover-provider.ts`: 호버 문서
+- [x] `src/lsp/symbol-provider.ts`: 문서 outline (섹션, 라벨 등)
+- [x] `src/lsp/reference-provider.ts`: find all references
+- [x] `src/lsp/project-index.ts`: 파일 간 심볼 추적 + `.aux` 데이터 통합
+- [x] `src/lsp/latex-patterns.ts`: 공유 패턴 상수 추출 (중복 제거)
+- [x] 단위 테스트: `aux-parser`, `completion-provider`, `latex-parser`, `project-index` (4 파일)
+
+### 현재 LSP 상태
+
+| 기능 | 구현 | 정확도 |
+|------|------|--------|
+| 자동완성 (명령어/환경) | ✅ 정적 DB | 높음 (내장 150개 명령어) |
+| 자동완성 (`\ref`/`\cite`) | ✅ `.aux` 파서 기반 | 높음 (컴파일 후 갱신) |
+| Go-to-definition | ✅ 크로스 파일 | 높음 |
+| Hover 문서 | ✅ 정적 DB | 높음 |
+| Document outline | ✅ 심볼 프로바이더 | 높음 |
+| Find references | ✅ 프로젝트 인덱스 | 높음 |
+| 매크로 확장 추적 | ❌ 미구현 (I5b) | — |
+| 사용자 정의 명령어 완성 | ❌ 미구현 (I5b) | — |
+
+---
+
+## Iteration 5c — 정적 번들 최적화 ✅
+
+**사용자 가치:** 초기 로드 전송량 대폭 감소 (gh-pages에서 체감 속도 향상)
+
+### Phase 1: 비영어 하이프네이션 파일 제거 (~3.0MB 절감)
+
+`.fmt` 파일에 모든 언어의 하이프네이션 trie가 baked-in 되어 있으므로 소스 `.tex` 파일은 static bundle에서 불필요.
+
+- [x] `public/texlive/pdftex/26/`: 156개 비영어 하이프네이션 파일 삭제 (6.7MB → 3.7MB)
+- [x] `scripts/bundle-texlive.mjs`: `isNonEnglishHyphenation()` 필터 추가 (재번들 시 자동 제외)
+- [x] 영어 파일 유지: `hyph-en-{us,gb}.tex`, `loadhyph-en-{us,gb}.tex`, `hyphen.tex`, `hyphen.cfg`, `language.dat`, `dumyhyph.tex`, `zerohyph.tex`
+
+### Phase 2-3: pdftex.map gzip 프리로드 + onmessage 리팩터
+
+`pdftex.map`(4.6MB)은 gzip 시 371KB로 92% 축소. 엔진 init 시 메인 스레드에서 `.gz` fetch → 해제 → 워커 MEMFS에 주입.
+
+- [x] `scripts/compress-assets.mjs`: pdftex.map gzip 압축 스크립트 (4.6MB → 371KB)
+- [x] `src/engine/swiftlatex-engine.ts`: `pendingResponses` Map 기반 단일 onmessage 핸들러로 리팩터 (기존: 각 메서드가 `onmessage` 교체 → 순차 전용)
+- [x] `src/engine/swiftlatex-engine.ts`: `fetchGzWithFallback()` — `.gz` 우선 fetch + `DecompressionStream` 해제, fallback raw fetch
+- [x] `src/engine/swiftlatex-engine.ts`: `preloadTexliveFile()` — format/filename/gzUrl → 워커 MEMFS 주입
+- [x] `src/engine/swiftlatex-engine.ts`: `init()` — `preloadFormat()` + `preloadTexliveFile(pdftex.map)` 병렬 실행 (`Promise.all`)
+- [x] `public/swiftlatex/swiftlatexpdftex.js` + `wasm-build/worker-template.js`: `preloadtexlive` 커맨드 추가
+
+### 결과
+
+| 자산 | Before | After | Transfer (gzip) |
+|------|--------|-------|-----------------|
+| texlive/26/ | 6.7MB (213 files) | 3.7MB (57 files) | ~1.0MB |
+| texlive/11/pdftex.map | 4.6MB (sync XHR) | 4.6MB + 371KB .gz | **371KB** (preload) |
+| swiftlatex/fmt | 2.3MB | 2.3MB (high entropy, gzip 무효) | ~2.3MB |
+| swiftlatex/wasm | 1.6MB | 1.6MB | ~0.5MB (CDN gzip) |
+
+---
+
+# Part III. 로드맵 (미구현)
+
+## Iteration 5b — Semantic Trace (엔진 트레이스 기반 LSP 강화)
+
+**사용자 가치:** "사용자 정의 명령어도 자동완성, 매크로 확장도 추적"
+
+**선행 완료:** I5a에서 정적 LSP 구현 완료.
+나머지는 pdfTeX C 코드에 semantic trace 훅을 추가하여 정적 분석의 한계를 넘는 것.
+
+* 엔진 트레이스: 매크로 확장 시점에 구조화 이벤트 emit (label, ref, cite, section, include, newcommand)
+* `\newcommand`/`\renewcommand` 정의를 트레이스에서 추출 → 자동완성에 반영
 * 정적 파서가 아닌 엔진 실행 트레이스 기반 → LaTeX 특유의 매크로 확장도 정확하게 추적
+* WASM 빌드 파이프라인(`wasm-build/`) 활용
 
-**KPI:** 자동완성 정확도 > 95%, go-to-definition 동작
+**KPI:** 사용자 정의 명령어 자동완성 동작, 매크로 확장 결과 기반 진단
 
 ---
 
-## Iteration 6 (10주) — PDL + LiveView: 즉시 반응
+## Iteration 6 — PDL + LiveView: 즉시 반응
 
 **사용자 가치:** "타이핑하면 50ms 내 페이지가 움직인다"
 
@@ -718,7 +677,7 @@ pdfTeX `ship_out()`에 PDL 출력 드라이버 추가. WebGPU로 PDL 렌더.
 
 ---
 
-## Iteration 7 (8주) — 대형 문서 + 안정화
+## Iteration 7 — 대형 문서 + 안정화
 
 **사용자 가치:** "100페이지 논문도 쾌적"
 
@@ -732,13 +691,11 @@ pdfTeX `ship_out()`에 PDL 출력 드라이버 추가. WebGPU로 PDL 렌더.
 
 ---
 
-## Iteration 8 (4주) — 서버 fallback + 프로젝트 관리
+## Iteration 8 — 서버 fallback + 프로젝트 관리
 
 **사용자 가치:** "어떤 패키지/문서 크기여도 일단 된다" + 폴더 구조로 실제 프로젝트 관리 가능
 
 ### A. 서버 컴파일 fallback
-
-WASM에서 실패하거나 지원하지 않는 패키지/엔진이 필요할 때 서버로 자동 전환.
 
 * 자동 fallback 조건: 패키지 미지원, WASM 메모리 초과, 타임버짓 초과
 * Phase 1: REST API (POST source → PDF + SyncTeX + log). WebSocket 스트리밍은 이후.
@@ -746,8 +703,6 @@ WASM에서 실패하거나 지원하지 않는 패키지/엔진이 필요할 때
 * 동일 UI/동일 기능 유지 (사용자는 로컬/서버를 의식하지 않음)
 
 ### B. 프로젝트 관리
-
-현재: 단일 프로젝트, 플랫 파일 목록.
 
 * 폴더 구조 지원 (VirtualFS 확장)
 * 이미지/바이너리 파일 업로드 (drag & drop → engine writeFile)
@@ -757,7 +712,7 @@ WASM에서 실패하거나 지원하지 않는 패키지/엔진이 필요할 때
 
 ---
 
-## Iteration 9 (4주) — 템플릿 + 패키지 확장
+## Iteration 9 — 템플릿 + 패키지 확장
 
 **사용자 가치:** "학회 템플릿 골라서 바로 시작"
 
@@ -779,162 +734,60 @@ WASM에서 실패하거나 지원하지 않는 패키지/엔진이 필요할 때
 
 ---
 
-# 8) 이 설계가 "틀 안에 갇히지 않는" 이유 (차별점)
+# Part IV. 현재 상태 요약
 
-1. **PDF를 최종 산출물로 유지하면서도**, 편집 중에는 **PDL+WebGPU로 '즉시 반응'**을 만든다.
-2. LSP의 정확도를 정적 분석에 맡기지 않고, **엔진 semantic trace로 끌어올린다.**
-3. VM snapshot/interruptible compilation처럼, **pdfTeX WASM을 제품 요구에 맞게 엔진 레벨로 변형**한다. (I3에서 검증된 빌드 파이프라인 활용)
-4. **이원 엔진 전략**: WASM(pdfTeX, 빠르고 가벼움)으로 90%+ 커버, 서버(full TeX Live)로 100% 커버. 사용자는 차이를 의식하지 않음.
-5. WebSocket fallback을 단순 백업이 아니라 **협업/빌드팜으로 확장 가능한 코어**로 설계한다.
-6. whitelist를 "기술 제한"이 아니라 **프로파일/락파일/재현성**으로 제품화한다.
+## 완료된 Iteration
 
----
+| Iteration | 내용 | 상태 |
+|-----------|------|------|
+| I0 | 리스크 스파이크 (엔진 선정, 벤치마크) | ✅ |
+| I1 | MVP: 브라우저 로컬 컴파일/뷰 | ✅ |
+| I2 | 체감 반응성 (cancel/debounce + SW 캐시 + PDF 이중버퍼) | ✅ |
+| I3 | SyncTeX 양방향 검색 (WASM 재빌드 포함) | ✅ |
+| I3b | 렌더 파이프라인 리팩터링 + UX polish | ✅ |
+| I3c | CI/CD + gh-pages 정적 배포 | ✅ |
+| I4 | Preamble snapshot (~40% 컴파일 단축) | ✅ |
+| I4b | 컴포넌트 API + 라이브러리 빌드 | ✅ |
+| I4c | 컴파일 흐름 수정 + WASM 버그 수정 | ✅ |
+| I5a | 정적 LaTeX LSP (completion, go-to-def, hover, symbols, refs) | ✅ |
+| I5c | 정적 번들 최적화 (hyph 제거, pdftex.map gzip preload, onmessage 리팩터) | ✅ |
 
-## Iteration 3c — CI/CD + gh-pages 배포 ✅
+## 코드베이스 현황
 
-**사용자 가치:** 설치 없이 `https://akcorca.github.io/latex-editor/`에서 에디터 사용 가능
-
-**동기:** 브라우저 컴포넌트이므로 gh-pages 정적 배포만으로 데모 가능. texlive 서버 없이도 기본 문서 컴파일 가능하게 한다.
-
-### A. GitHub Actions CI ✅
-
-- [x] `.github/workflows/ci.yml`: lint → tsgo → test → vite build → gh-pages deploy
-- [x] `.github/workflows/wasm-build.yml`: Docker 기반 WASM 빌드 (x86_64, `wasm-build/` 변경 시)
-- [x] `vite.config.ts`: `base: process.env.BASE_URL || '/'` (gh-pages 서브디렉토리 대응)
-- [x] `.gitignore`: `public/swiftlatex/` 추적 허용 (CI에서 WASM 바이너리 필요)
-- [x] LICENSE (MIT + 서드파티 고지) + README.md
-
-### B. gh-pages 정적 배포 호환 ✅
-
-texlive 서버 없이 순수 정적 파일만으로 컴파일하려면 여러 문제 해결 필요:
-
-- [x] **Base path**: `import.meta.env.BASE_URL`로 모든 정적 자산 경로 수정 (엔진, SW, texlive)
-- [x] **Format 파일 호환**: SyncTeX WASM 바이너리(1.40.22)용 `.fmt` 추출 (Playwright 자동화)
-  - Texlive-Ondemand의 `.fmt`(1.40.21)와 비호환 → "Fatal format file error; I'm stymied"
-  - `scripts/extract-format.mjs`: 브라우저에서 WASM이 빌드한 포맷을 자동 추출
-- [x] **TeX 파일 번들링**: 277개 필수 파일 (13MB) — .cls, .sty, .tfm, .pfb, .enc, .map
-  - `scripts/bundle-texlive.mjs`: Playwright로 컴파일 시 요청되는 texlive 파일 캡처
-  - `public/texlive/pdftex/{format_number}/{filename}` 구조로 저장
-- [x] **kpse 정적 호스팅 대응**: `fileid`/`pkid` 헤더 없는 환경 + 404 캐싱
-  - texlive 서버는 `fileid` 응답 헤더로 저장 경로 지정 → 정적 호스팅에 없으면 `/tex/null`에 저장
-  - 404 (정적) vs 301 (texlive 서버) 응답 차이 → 404도 캐시하여 반복 요청 방지
-- [x] **Underfull 경고 필터**: 에러 패널에서 underfull \hbox/\vbox 경고 제거 (cosmetic, 비실행적)
-
-### C. Service Worker 정적 대응 ✅
-
-- [x] `public/sw.js`: `self.registration.scope` 기반 base-path-aware fetch 핸들러
-- [x] `tsconfig.json`: `"types": ["vite/client"]` (import.meta.env 타입)
-
-### 결과 파일
-
-| 파일 | 작업 |
+| 지표 | 수치 |
 |------|------|
-| `.github/workflows/ci.yml` | 신규 — CI + gh-pages deploy |
-| `.github/workflows/wasm-build.yml` | 신규 — WASM build on x86_64 |
-| `vite.config.ts` | base path 추가 |
-| `src/engine/swiftlatex-engine.ts` | base path, format preload |
-| `src/main.ts` | SW registration base path |
-| `public/sw.js` | base-aware fetch handler |
-| `public/swiftlatex/swiftlatexpdftex.js` | loadformat, fileid fallback, 404 캐싱 |
-| `wasm-build/worker-template.js` | 동일 변경 (source of truth) |
-| `public/swiftlatex/swiftlatexpdftex.fmt` | SyncTeX 바이너리 호환 포맷 (2.3MB) |
-| `public/texlive/` | 277개 TeX 파일 번들 (13MB) |
-| `scripts/extract-format.mjs` | Playwright 포맷 추출 |
-| `scripts/bundle-texlive.mjs` | Playwright texlive 번들링 |
-| `src/engine/parse-errors.ts` | underfull 경고 필터 |
-| `LICENSE`, `README.md`, `docs/develop.md` | 문서 |
+| TypeScript 소스 | 45 파일, ~5,600줄 (프로덕션) |
+| 단위 테스트 | 10 파일, ~2,100줄 |
+| E2E 테스트 | 8 스펙, ~1,070줄 |
+| 런타임 의존성 | 2개 (monaco-editor, pdfjs-dist) |
+| 정적 자산 | WASM 1.6MB + worker 137KB + .fmt 2.3MB + texlive 8.7MB ≈ 13MB (raw), ~4MB (gzip transfer) |
+| 배포 | https://akcorca.github.io/latex-editor/ |
 
-### 배포 현황
+## 다음 작업 우선순위
 
-- **URL**: `https://akcorca.github.io/latex-editor/`
-- **정적 자산 크기**: WASM 1.6MB + worker 132KB + .fmt 2.3MB + texlive 13MB ≈ **17MB total**
-- **기능**: 에디터 + 컴파일 + PDF 프리뷰 + SyncTeX 양방향 검색 (texlive 서버 불필요)
-- **제약**: 번들에 포함된 패키지만 사용 가능 (article, amsmath, amssymb, amsthm + 의존성)
+### ~~Option A: 정적 번들 최적화~~ → ✅ 완료 (I5c)
 
----
+### Option B: Semantic Trace + LSP 정확도 (I5b, 수주)
 
-## Iteration 4 — Preamble Snapshot (`\dump` 기반 포맷 캐싱) ✅
+정적 LSP로 커버 못 하는 부분 — 엔진 실행 트레이스 기반:
 
-**사용자 가치:** body 편집 시 컴파일 ~40% 빠름 (preamble 재처리 생략)
+1. pdfTeX C 코드에 semantic trace 훅 (매크로 확장 시 이벤트 emit)
+2. 사용자 정의 `\newcommand` 자동완성
+3. 매크로 확장 결과 기반 정확한 진단
+4. 엔진 트레이스 → LSP "진실 소스" 업그레이드
 
-**접근법:** C 코드 변경 없이, TeX의 `\dump` primitive로 preamble 상태를 format 파일로 캐싱.
-`\begin{document}` 앞의 preamble을 `-ini` 모드로 빌드 → `.fmt` 파일 생성.
-이후 body 편집 시 cached format을 로드하여 preamble 처리를 완전 건너뜀.
+### Option C: PDL + LiveView (I6, 대형)
 
-### 핵심 구현
+가장 야심찬 목표 — 타이핑 30-80ms 내 화면 반응:
 
-- [x] **Worker**: `extractPreamble()`, `simpleHash()`, `buildPreambleFormat()` — preamble 분석 + format 빌드
-- [x] **Worker**: HIT/MISS 로직 — hash 비교로 preamble 변경 감지, 자동 fallback
-- [x] **Worker**: SyncTeX 라인 보존 — body 파일에 `%` 주석줄 패딩
-- [x] **Worker**: `main.tex` 복원 — preamble 컴파일 후 원본 복원 (recompile 안전성)
-- [x] **Host**: `CompileResult.preambleSnapshot` 플래그, 상태바 "(cached preamble)" 표시
-- [x] **Tests**: preamble-utils 단위 테스트 10개, E2E 테스트 3개
-- [x] **CI**: `iter4-*` 브랜치 트리거, WASM smoke test
+1. pdfTeX `ship_out()` PDL 출력 드라이버
+2. WebGPU 렌더러 (glyph atlas, 타일링)
+3. Interruptible compilation (Asyncify)
 
-### 벤치마크
+### Option D: 서버 fallback + 프로젝트 관리 (I8)
 
-| 항목 | 시간 |
-|------|------|
-| Preamble format 빌드 (MISS, 1회) | 198ms |
-| Body 컴파일 (HIT, cold) | 441ms |
-| Body 컴파일 (HIT, warm) | 258–302ms |
-| 추정 full 컴파일 (preamble 없이) | ~460ms |
-| **체감 개선** | **~40% 빠름** |
+실용적 완성도 — 어떤 패키지/문서도 컴파일 가능:
 
-### 제약 사항
-
-- Preamble format은 **첫 컴파일 시에만** 빌드 가능 (`_main()` → `_compileLaTeX()` 후 Emscripten JS 상태 비호환)
-- 세션 중 preamble 변경 시 format 재빌드 불가 → full compile fallback (기능 손실 없음)
-- 해결하려면: 별도 Web Worker로 format 빌드 분리, 또는 Emscripten JS 상태 리셋 방법 탐색
-
-### 결과 파일
-
-| 파일 | 작업 |
-|------|------|
-| `wasm-build/worker-template.js` | 핵심: helpers + preamble 로직 (~150줄) |
-| `public/swiftlatex/swiftlatexpdftex.js` | worker-template.js와 동기화 |
-| `src/engine/preamble-utils.ts` | 신규: 테스트 가능한 preamble 분석 |
-| `src/engine/preamble-utils.test.ts` | 신규: 단위 테스트 10개 |
-| `e2e/preamble-snapshot.spec.ts` | 신규: E2E 테스트 3개 |
-| `src/types.ts` | `preambleSnapshot` 필드 추가 |
-| `src/engine/swiftlatex-engine.ts` | 응답에서 `preambleSnapshot` 추출 |
-| `src/main.ts` | 상태 표시 |
-| `.github/workflows/ci.yml` | `iter4-*` 브랜치 트리거 |
-| `.github/workflows/wasm-build.yml` | smoke test 추가 |
-
----
-
-# 9) 다음 단계
-
-I4 완료 기준:
-- Preamble snapshot 동작: MISS → format 빌드, HIT → 캐시 사용
-- 94 단위 테스트 통과
-- body 편집 시 ~40% 컴파일 시간 단축
-
-## 제안: 다음 작업 우선순위
-
-### Option A: 정적 번들 최적화 (1-2일)
-
-현재 정적 자산이 17MB로 초기 로드가 무겁다. 실질적 사용자 체감 개선:
-
-1. **texlive 번들 압축**: 13MB → gzip/brotli로 ~3-4MB
-2. **불필요 파일 제거**: 277개 중 hyphenation 패턴(~200개)은 영어만 남기면 대폭 축소
-3. **.fmt gzip 서빙**: 2.3MB → ~800KB
-4. **lazy loading**: 폰트 파일(.pfb, .tfm)은 첫 컴파일 시 on-demand fetch
-
-### Option B: 컴포넌트 API 정의 (1주)
-
-호스트 제품 임베딩이 목표이므로, 외부 인터페이스를 먼저 확립:
-
-1. `LatexEditor` 클래스: `loadProject(files)`, `saveProject()`, `onCompile(callback)`
-2. `<latex-editor>` Web Component wrapper
-3. NPM 패키지 빌드 (Vite library mode)
-4. 최소 사용 예시 (`examples/embed.html`)
-
-### Option C: Preamble 재빌드 개선
-
-I4 제약 해소 — 세션 중 preamble 변경 시에도 format 재빌드:
-
-1. **별도 Worker**: format 빌드 전용 Web Worker (main worker와 독립)
-2. **Emscripten 상태 리셋**: `_compileLaTeX()` 후 JS 런타임 상태 복구 방법 탐색
-3. **incremental format**: preamble diff 기반 부분 재빌드
+1. WASM 실패 시 서버 자동 전환 (REST API)
+2. 폴더 구조, 이미지 업로드, BibTeX 지원
+3. XeTeX/LuaTeX는 서버 전용

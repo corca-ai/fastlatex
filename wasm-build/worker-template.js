@@ -13,6 +13,7 @@
 //   mkdir          — create a directory in the virtual filesystem
 //   setmainfile    — set the main .tex entry point
 //   settexliveurl  — set the TexLive package server endpoint
+//   preloadtexlive — pre-load a texlive file into MEMFS cache
 //   flushcache     — clear the working directory
 //   grace          — gracefully shut down the worker
 //
@@ -848,6 +849,21 @@ self["onmessage"] = function(ev) {
         self._fmtFallback = fmtData;
         // console.log("[loadformat] Fallback format loaded: " + fmtData.length + " bytes");
         self.postMessage({ "result": "ok", "cmd": "loadformat" });
+    } else if (cmd === "preloadtexlive") {
+        // Pre-load a texlive file from main thread (avoids sync XHR on first compile).
+        // data: {format, filename, data: ArrayBuffer, msgId}
+        var format = data["format"];
+        var filename = data["filename"];
+        var fileData = new Uint8Array(data["data"]);
+        var msgId = data["msgId"];
+        var cacheKey = format + "/" + filename;
+        var savepath = TEXCACHEROOT + "/" + filename;
+        FS.writeFile(savepath, fileData);
+        texlive200_cache[cacheKey] = savepath;
+        if (format === 10) {
+            FS.writeFile(WORKROOT + "/" + filename, fileData);
+        }
+        self.postMessage({ "result": "ok", "cmd": "preloadtexlive", "msgId": msgId });
     } else if (cmd === "grace") {
         console.error("Gracefully Close");
         self.close();
