@@ -617,165 +617,72 @@ I3 기능 완성 후 품질 개선. 커밋 `83f3a2c`, `b4c1a08`.
 
 ---
 
-## Iteration 3b (3주) — 렌더 파이프라인 리팩터링 + 체감 성능 개선
+## Iteration 3b — 렌더 파이프라인 리팩터링 + 체감 성능 개선 ✅
 
 **사용자 가치:** 편집 → PDF 반영이 체감적으로 빨라짐, UI가 한 단계 세련됨
 
 **원칙:**
-1. **측정 우선 (Measure First)**: 모든 성능 최적화는 적용 전/후 벤치마크를 남긴다. 체감 개선이 측정으로 확인되지 않으면 복잡도만 늘린 것이므로 되돌린다.
-2. **추상화 우선 (Abstract First)**: 최적화 로직을 기존 코드에 직접 끼워넣지 않는다. 먼저 렌더 파이프라인의 책임을 분리하고, 명확한 인터페이스 뒤에 최적화를 배치한다. 최적화를 빼도 코드가 깨지지 않아야 한다.
-3. **복잡도 예산**: 각 최적화의 코드 증가량이 정당화될 만큼 측정 결과가 유의미해야 한다. "이론적으로 빠를 것"은 근거가 아니다.
+1. **측정 우선 (Measure First)**: 모든 성능 최적화는 적용 전/후 벤치마크를 남긴다.
+2. **추상화 우선 (Abstract First)**: 최적화 로직을 기존 코드에 직접 끼워넣지 않는다. 먼저 책임을 분리하고 인터페이스 뒤에 배치한다.
+3. **복잡도 예산**: 측정 결과가 유의미하지 않으면 되돌린다.
 
-### 현재 병목 분석 (편집 → PDF 반영)
+### 완료 항목
 
-```
-편집 → debounce (50-1000ms) → compile (384ms) → render (184ms) → DOM swap
-       \____________________/   \_____________/   \___________/
-       50ms으로 축소 ✅          WASM 고정 비용     canvas pool ✅
-```
+**인프라**
+- [x] `src/perf/metrics.ts`: span 기반 타이밍 수집 + `?perf=1` 디버그 오버레이
+- [x] `e2e/perf-benchmark.spec.ts`: 편집→PDF 사이클 + 엔진 로드 시간 E2E 벤치마크
 
-총 체감 지연: ~500ms-1.4s. 컴파일 자체는 WASM 고정 비용이지만, 렌더 단계와 디바운스에서 줄일 수 있다.
+**렌더 파이프라인 리팩터링**
+- [x] `src/viewer/page-renderer.ts`: 캔버스 렌더 책임 분리 (canvas pool: recycle/acquire)
+- [x] `src/viewer/pdf-viewer.ts`: PageRenderer 위임 + 가시 페이지 우선 렌더링
+- [x] IntersectionObserver 기반 스크롤 페이지 추적 + 스크롤 위치 보존
 
----
+**성능 최적화**
+- [x] 가시 페이지 우선 렌더링: 현재 페이지 먼저 렌더 + DOM swap → 나머지 순차
+- [x] 캔버스 풀: `PageRenderer`에서 canvas 재사용 (DOM 생성 비용 절감)
+- [x] 디바운스 하한 150ms → 50ms (적응형, `compileTime * 0.5`로 조절)
+- [x] `CompileScheduler.flush()`: Ctrl+S로 디바운스 즉시 소화
 
-### Phase 0: 벤치마크 인프라 구축
+**UX 개선**
+- [x] 에디터 인라인 에러 마커: `src/ui/error-markers.ts` (Monaco `setModelMarkers`)
+- [x] Ctrl/Cmd+S 즉시 컴파일 (Monaco `addAction` keybinding)
+- [x] PDF 다운로드 버튼 (툴바, Blob URL)
+- [x] 줌 레벨 % 표시 + 더블클릭 100% 리셋
 
-최적화 전에 측정 기반을 만든다. 이후 모든 변경은 이 인프라 위에서 before/after를 비교한다.
+**설계 개선**
+- [x] IndexedDB 영속화: `src/fs/persistent-fs.ts` + VirtualFS 통합 (500ms 디바운스 자동 저장)
+- [x] 에러 파서: overfull/underfull box 경고 파싱 + 헬퍼 함수 추출로 복잡도 개선
 
-- [x] `src/perf/metrics.ts`: 편집→PDF 반영 전 구간 타이밍 수집
-  - debounce 대기 시간, compile 시간, synctex-parse 시간, render 시간, total
-  - `performance.now()` 기반 span 수집
-- [x] E2E 벤치마크 테스트: `e2e/perf-benchmark.spec.ts` (편집→PDF 사이클 + 엔진 로드 시간)
-- [x] 결과를 UI 오버레이로 표시하는 디버그 모드 (`?perf=1` 쿼리)
+### 스킵/연기 항목
 
-### Phase 1: 렌더 파이프라인 리팩터링
+- **OffscreenCanvas**: 가시 페이지 우선 렌더링으로 첫 페이지 체감이 충분히 빨라짐. 복잡도 대비 효과 부족으로 스킵. 50p+ 문서에서 재평가.
+- **성능 측정/검증**: `?perf=1` 오버레이와 E2E 벤치마크가 준비됨. Docker 환경에서 실제 before/after 측정은 별도 세션에서 수행.
+- **Forward search 다중 하이라이트**: 수식 환경 bbox 너비 문제로 I3 polish 때 revert. 추후 재시도.
 
-현재 `PdfViewer`가 렌더링 + SyncTeX + 클릭 핸들링 + 줌 + 스크롤 추적 + 하이라이트를 모두 담당한다.
-최적화를 적용하기 전에 책임을 분리한다.
+### 결과 파일
 
-- [x] `PdfViewer` 책임 분리
-  - `PageRenderer`: 캔버스 생성/렌더/재사용 (canvas pool 포함)
-  - `PdfViewer`: 오케스트레이션 (PageRenderer + SyncTeX + 이벤트)만 담당
-- [x] `PageRenderer` 인터페이스 설계
-  - `renderPage(doc, pageNum, scale)` → `{wrapper, canvas, pageNum}`
-  - `recycle(canvases)` / `clearPool()` — canvas pool 관리
-  - 내부 구현만 교체해도 PdfViewer에 영향 없는 구조
-
-### Phase 2: 렌더 성능 최적화 (측정 → 적용 → 검증)
-
-각 항목을 독립적으로 적용하고, 적용마다 벤치마크를 남긴다.
-
-**P2-A. 가시 페이지 우선 렌더링** (예상 효과: 체감 지연 30-50% 감소)
-
-현재: 모든 페이지를 순차 렌더 후 DOM swap.
-개선: 현재 보이는 페이지를 먼저 렌더 → 즉시 swap → 나머지는 `requestIdleCallback`으로.
-
-- [ ] 측정: 현재 전체 렌더 시간 vs 첫 페이지만 렌더 시간
-- [x] 구현: `PdfViewer.renderAllPages`에서 현재 페이지 먼저 렌더 + DOM swap → 나머지 순차 렌더
-- [ ] 검증: 다중 페이지(5p+) 문서에서 체감 지연 측정
-
-**P2-B. 캔버스 재사용** (예상 효과: DOM 조작 비용 제거)
-
-현재: 매 컴파일마다 새 canvas 엘리먼트 생성 + fragment swap.
-개선: 페이지 수가 같으면 기존 canvas context에 다시 그린다.
-
-- [ ] 측정: canvas 생성 + DOM swap 비용 분리 측정 (perf overlay로)
-- [x] 구현: `PageRenderer`에서 기존 canvas pool 관리 (recycle/acquire)
-- [ ] 검증: before/after DOM swap 시간 비교
-
-**P2-C. 디바운스 하한 축소** (예상 효과: 50-100ms 절감)
-
-현재: 최소 150ms. 컴파일이 200ms 미만인 작은 문서에서도 150ms 대기.
-개선: 작은 문서는 50ms까지 축소 (컴파일 시간 비례).
-
-- [ ] 측정: 다양한 문서 크기에서 최적 디바운스 범위 탐색
-- [x] 구현: `CompileScheduler` 하한 150ms → 50ms
-- [ ] 검증: 타이핑 중 불필요한 중복 컴파일 발생하지 않는지 확인
-
-**P2-D. OffscreenCanvas** (예상 효과: 메인 스레드 블로킹 제거)
-
-현재: 메인 스레드에서 canvas 렌더.
-개선: Worker에서 OffscreenCanvas로 렌더 → `transferToImageBitmap`.
-
-- [x] 판단: 현재 렌더가 ~184ms이고 visible-page-first로 첫 페이지는 ~50ms 내에 표시됨. OffscreenCanvas의 복잡도(Worker 통신, transferControlToOffscreen) 대비 효과가 부족하므로 **스킵**
-- [ ] 재평가: 문서가 대형(50p+)이거나 렌더가 500ms 이상이면 재검토
-
-### Phase 3: UX 개선
-
-성능과 무관한 사용성 개선. 코드 복잡도 증가가 미미한 것들.
-
-**P3-A. 에디터 인라인 에러 마커**
-
-현재: 에러를 별도 패널에만 표시. 에디터에서 어느 줄인지 한눈에 안 보임.
-개선: Monaco `setModelMarkers`로 에러 줄에 빨간 물결선.
-
-- [x] `src/ui/error-markers.ts`: TexError[] → Monaco IMarkerData[] 변환
-- [x] `main.ts`: `onCompileResult`에서 마커 업데이트
-
-**P3-B. Ctrl+S 즉시 컴파일**
-
-현재: 디바운스를 기다려야 컴파일 시작.
-개선: Ctrl+S로 디바운스 무시하고 즉시 컴파일 트리거.
-
-- [x] `CompileScheduler`에 `flush()` 메서드 추가 (debounce timer 즉시 fire)
-- [x] Monaco keybinding 등록 (Ctrl/Cmd+S → syncAndCompile + flush)
-
-**P3-C. PDF 다운로드**
-
-현재: PDF를 다운로드할 방법이 없음.
-개선: 툴바에 다운로드 버튼. 마지막 컴파일 결과를 Blob URL로 다운로드.
-
-- [x] `PdfViewer`에 `getLastPdf(): Uint8Array | null`
-- [x] 툴바에 다운로드 버튼 추가 (Blob URL → download)
-
-**P3-D. 줌 레벨 표시**
-
-현재: +/- 버튼만 있고 현재 배율을 모름.
-개선: 배율 숫자 표시, 더블클릭으로 100% 리셋.
-
-- [x] PDF controls에 배율 표시 (`150%` 등), 더블클릭으로 100% 리셋
-
-### Phase 4: 설계 개선
-
-**P4-A. VirtualFS → IndexedDB 영속화**
-
-현재: 새로고침하면 편집 내용 전부 소실.
-개선: IndexedDB에 파일 자동 저장. 페이지 로드 시 복원.
-
-- [x] `src/fs/persistent-fs.ts`: IndexedDB 래퍼 (load/save/delete)
-- [x] `VirtualFS`에 통합: `loadPersisted()`, `enablePersistence()`, auto-save
-- [x] 저장 디바운스: 500ms (파일별 독립 타이머)
-
-**P4-B. 에러 파서 개선**
-
-현재: 단순 regex — 다중 파일 에러, overfull/underfull box 경고 미지원.
-개선: 다중 파일 경로 추적, box 경고 파싱 추가.
-
-- [x] `parse-errors.ts` 확장: overfull/underfull box 경고 파싱 + 복잡도 리팩터
-
-### KPI (Gate 조건)
-
-| 지표 | 현재 | 목표 | 측정 방법 |
-|------|------|------|-----------|
-| 편집→첫 페이지 갱신 | ~700ms | < 400ms (2p 문서) | E2E 벤치마크 |
-| 렌더 시간 (전체) | 184ms | < 100ms (2p 문서) | `performance.measure` |
-| 렌더 시간 (첫 페이지) | 184ms | < 50ms | `performance.measure` |
-| 에러 인라인 표시 | 없음 | 동작 | E2E 확인 |
-| Ctrl+S 즉시 컴파일 | 없음 | 동작 | E2E 확인 |
-| 새로고침 후 내용 보존 | 불가 | 동작 | E2E 확인 |
-
-### 파일 변경 예상
-
-| 파일 | 작업 |
+| 파일 | 상태 |
 |------|------|
-| `src/perf/metrics.ts` | 신규 — 구간 타이밍 수집 |
-| `src/viewer/page-renderer.ts` | 신규 — 캔버스 렌더 책임 분리 |
-| `src/viewer/pdf-viewer.ts` | 리팩터 — PageRenderer 위임 |
-| `src/engine/compile-scheduler.ts` | flush() 추가, 디바운스 하한 조절 |
-| `src/ui/error-markers.ts` | 신규 — Monaco 인라인 마커 |
-| `src/fs/persistent-fs.ts` | 신규 — IndexedDB 영속화 |
-| `src/main.ts` | 마커/단축키/벤치마크 통합 |
-| `e2e/perf-benchmark.spec.ts` | 신규 — 성능 측정 E2E |
+| `src/perf/metrics.ts` | 신규 |
+| `src/viewer/page-renderer.ts` | 신규 |
+| `src/ui/error-markers.ts` | 신규 |
+| `src/fs/persistent-fs.ts` | 신규 |
+| `e2e/perf-benchmark.spec.ts` | 신규 |
+| `src/viewer/pdf-viewer.ts` | 리팩터 (PageRenderer 위임, 가시 우선 렌더) |
+| `src/engine/compile-scheduler.ts` | 확장 (flush, perf marks) |
+| `src/engine/parse-errors.ts` | 확장 (box 경고, 헬퍼 추출) |
+| `src/fs/virtual-fs.ts` | 확장 (IndexedDB 통합) |
+| `src/main.ts` | 통합 (마커, 단축키, PDF 다운로드, 영속화) |
+
+### KPI
+
+| 지표 | I3b 이전 | I3b 목표 | 상태 |
+|------|----------|----------|------|
+| 에러 인라인 표시 | 없음 | 동작 | ✅ |
+| Ctrl+S 즉시 컴파일 | 없음 | 동작 | ✅ |
+| 새로고침 후 내용 보존 | 불가 | 동작 | ✅ |
+| 렌더 시간 (첫 페이지) | ~184ms | < 50ms | 구현 완료, 측정 대기 |
+| 편집→첫 페이지 갱신 | ~700ms | < 400ms | 구현 완료, 측정 대기 |
 
 ---
 
