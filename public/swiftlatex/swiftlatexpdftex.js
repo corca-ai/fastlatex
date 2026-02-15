@@ -440,6 +440,11 @@ function compileLaTeXRoutine() {
             }
         } else {
             console.error("[compile] Format build FAILED (status=" + fmtStatus + "): " + self.memlog);
+            // Fall back to preloaded format if available
+            if (self._fmtFallback) {
+                self._fmtData = self._fmtFallback;
+                console.log("[compile] Using fallback format: " + self._fmtData.length + " bytes");
+            }
         }
         // Re-prepare for the actual compilation
         prepareExecutionContext();
@@ -687,11 +692,12 @@ self["onmessage"] = function(ev) {
     } else if (cmd === "setmainfile") {
         self.mainfile = data["url"];
     } else if (cmd === "loadformat") {
-        // Pre-load a format file (.fmt) so the worker skips building one.
-        // The host can fetch the .fmt from a static URL and send it here.
+        // Pre-load a format file (.fmt) as a FALLBACK for when the texlive
+        // server is unavailable (e.g. gh-pages). Stored separately from
+        // _fmtData so the worker still tries to build a fresh format first.
         var fmtData = new Uint8Array(data["data"]);
-        self._fmtData = fmtData;
-        console.log("[loadformat] Pre-loaded format: " + fmtData.length + " bytes");
+        self._fmtFallback = fmtData;
+        console.log("[loadformat] Fallback format loaded: " + fmtData.length + " bytes");
         self.postMessage({ "result": "ok", "cmd": "loadformat" });
     } else if (cmd === "grace") {
         console.error("Gracefully Close");
