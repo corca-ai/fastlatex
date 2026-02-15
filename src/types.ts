@@ -7,6 +7,8 @@ export interface CompileResult {
   compileTime: number
   /** Raw synctex data (uncompressed or gzipped) from pdfTeX -synctex=1 */
   synctex: Uint8Array | null
+  /** Whether a cached preamble format was used for this compilation */
+  preambleSnapshot?: boolean
 }
 
 export interface TexError {

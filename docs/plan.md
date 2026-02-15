@@ -790,14 +790,100 @@ WASM에서 실패하거나 지원하지 않는 패키지/엔진이 필요할 때
 
 ---
 
-# 9) 다음 단계 (I4 착수 전 준비)
+## Iteration 3c — CI/CD + gh-pages 배포 ✅
 
-I3b 완료 기준:
-- pdfTeX WASM + SyncTeX 양방향 검색 동작
-- 렌더 파이프라인 리팩터링 + 체감 성능 개선 완료
+**사용자 가치:** 설치 없이 `https://akcorca.github.io/latex-editor/`에서 에디터 사용 가능
+
+**동기:** 브라우저 컴포넌트이므로 gh-pages 정적 배포만으로 데모 가능. texlive 서버 없이도 기본 문서 컴파일 가능하게 한다.
+
+### A. GitHub Actions CI ✅
+
+- [x] `.github/workflows/ci.yml`: lint → tsgo → test → vite build → gh-pages deploy
+- [x] `.github/workflows/wasm-build.yml`: Docker 기반 WASM 빌드 (x86_64, `wasm-build/` 변경 시)
+- [x] `vite.config.ts`: `base: process.env.BASE_URL || '/'` (gh-pages 서브디렉토리 대응)
+- [x] `.gitignore`: `public/swiftlatex/` 추적 허용 (CI에서 WASM 바이너리 필요)
+- [x] LICENSE (MIT + 서드파티 고지) + README.md
+
+### B. gh-pages 정적 배포 호환 ✅
+
+texlive 서버 없이 순수 정적 파일만으로 컴파일하려면 여러 문제 해결 필요:
+
+- [x] **Base path**: `import.meta.env.BASE_URL`로 모든 정적 자산 경로 수정 (엔진, SW, texlive)
+- [x] **Format 파일 호환**: SyncTeX WASM 바이너리(1.40.22)용 `.fmt` 추출 (Playwright 자동화)
+  - Texlive-Ondemand의 `.fmt`(1.40.21)와 비호환 → "Fatal format file error; I'm stymied"
+  - `scripts/extract-format.mjs`: 브라우저에서 WASM이 빌드한 포맷을 자동 추출
+- [x] **TeX 파일 번들링**: 277개 필수 파일 (13MB) — .cls, .sty, .tfm, .pfb, .enc, .map
+  - `scripts/bundle-texlive.mjs`: Playwright로 컴파일 시 요청되는 texlive 파일 캡처
+  - `public/texlive/pdftex/{format_number}/{filename}` 구조로 저장
+- [x] **kpse 정적 호스팅 대응**: `fileid`/`pkid` 헤더 없는 환경 + 404 캐싱
+  - texlive 서버는 `fileid` 응답 헤더로 저장 경로 지정 → 정적 호스팅에 없으면 `/tex/null`에 저장
+  - 404 (정적) vs 301 (texlive 서버) 응답 차이 → 404도 캐시하여 반복 요청 방지
+- [x] **Underfull 경고 필터**: 에러 패널에서 underfull \hbox/\vbox 경고 제거 (cosmetic, 비실행적)
+
+### C. Service Worker 정적 대응 ✅
+
+- [x] `public/sw.js`: `self.registration.scope` 기반 base-path-aware fetch 핸들러
+- [x] `tsconfig.json`: `"types": ["vite/client"]` (import.meta.env 타입)
+
+### 결과 파일
+
+| 파일 | 작업 |
+|------|------|
+| `.github/workflows/ci.yml` | 신규 — CI + gh-pages deploy |
+| `.github/workflows/wasm-build.yml` | 신규 — WASM build on x86_64 |
+| `vite.config.ts` | base path 추가 |
+| `src/engine/swiftlatex-engine.ts` | base path, format preload |
+| `src/main.ts` | SW registration base path |
+| `public/sw.js` | base-aware fetch handler |
+| `public/swiftlatex/swiftlatexpdftex.js` | loadformat, fileid fallback, 404 캐싱 |
+| `wasm-build/worker-template.js` | 동일 변경 (source of truth) |
+| `public/swiftlatex/swiftlatexpdftex.fmt` | SyncTeX 바이너리 호환 포맷 (2.3MB) |
+| `public/texlive/` | 277개 TeX 파일 번들 (13MB) |
+| `scripts/extract-format.mjs` | Playwright 포맷 추출 |
+| `scripts/bundle-texlive.mjs` | Playwright texlive 번들링 |
+| `src/engine/parse-errors.ts` | underfull 경고 필터 |
+| `LICENSE`, `README.md`, `docs/develop.md` | 문서 |
+
+### 배포 현황
+
+- **URL**: `https://akcorca.github.io/latex-editor/`
+- **정적 자산 크기**: WASM 1.6MB + worker 132KB + .fmt 2.3MB + texlive 13MB ≈ **17MB total**
+- **기능**: 에디터 + 컴파일 + PDF 프리뷰 + SyncTeX 양방향 검색 (texlive 서버 불필요)
+- **제약**: 번들에 포함된 패키지만 사용 가능 (article, amsmath, amssymb, amsthm + 의존성)
+
+---
+
+# 9) 다음 단계
+
+I3c 완료 기준:
+- gh-pages 정적 배포 동작 (서버 불필요)
 - 84 단위 테스트 + 19 E2E 테스트 통과
+- CI green (lint + typecheck + test + build + deploy)
 
-I4 착수 전 확인 사항:
+## 제안: 다음 작업 우선순위
+
+### Option A: 정적 번들 최적화 (1-2일)
+
+현재 정적 자산이 17MB로 초기 로드가 무겁다. 실질적 사용자 체감 개선:
+
+1. **texlive 번들 압축**: 13MB → gzip/brotli로 ~3-4MB (Vite build가 자동 처리하지만, 폰트 바이너리는 추가 최적화 가능)
+2. **불필요 파일 제거**: 277개 중 hyphenation 패턴(~200개)은 영어만 남기면 대폭 축소
+3. **.fmt gzip 서빙**: 2.3MB → ~800KB
+4. **lazy loading**: 폰트 파일(.pfb, .tfm)은 첫 컴파일 시 on-demand fetch
+
+### Option B: 컴포넌트 API 정의 (1주)
+
+호스트 제품 임베딩이 목표이므로, 외부 인터페이스를 먼저 확립:
+
+1. `LatexEditor` 클래스: `loadProject(files)`, `saveProject()`, `onCompile(callback)`
+2. `<latex-editor>` Web Component wrapper
+3. NPM 패키지 빌드 (Vite library mode)
+4. 최소 사용 예시 (`examples/embed.html`)
+
+### Option C: I4 착수 — Preamble snapshot (4-6주)
+
+컴파일 성능의 근본적 개선. I3 빌드 파이프라인 활용:
+
 1. **Emscripten Asyncify 조사**: `emscripten_sleep()` 삽입 가능 여부, 바이너리 크기 영향 측정
 2. **WASM memory snapshot PoC**: `Module.HEAP` 저장/복원 → preamble 스킵 프로토타입
 3. **preamble 경계 감지**: `\begin{document}` 시점에 snapshot 트리거하는 C 코드 훅 설계

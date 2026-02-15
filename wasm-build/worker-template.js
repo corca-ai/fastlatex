@@ -51,7 +51,6 @@ Module["print"] = function(a) {
 
 Module["printErr"] = function(a) {
     self.memlog += a + "\n";
-    console.log(a);
 };
 
 // Create the virtual filesystem directories before the WASM module starts.
@@ -180,6 +179,162 @@ function prepareExecutionContext() {
     FS.chdir(WORKROOT);
 }
 
+// --- DRY helpers -------------------------------------------------------------
+
+// Write texmf.cnf so kpathsea can find fonts/styles and has enough memory.
+function writeTexmfCnf() {
+    var texmfCnf = [
+        "% texmf.cnf for WASM pdfTeX — matches TeX Live 2020 defaults",
+        "% Path configuration — kpathsea needs these to find files in CWD",
+        "TEXINPUTS = .;" + TEXCACHEROOT + "//",
+        "TFMFONTS = .;" + TEXCACHEROOT + "//",
+        "T1FONTS = .;" + TEXCACHEROOT + "//",
+        "AFMFONTS = .;" + TEXCACHEROOT + "//",
+        "TEXFONTMAPS = .;" + TEXCACHEROOT + "//",
+        "ENCFONTS = .;" + TEXCACHEROOT + "//",
+        "VFFONTS = .;" + TEXCACHEROOT + "//",
+        "TEXFORMATS = .;" + TEXCACHEROOT + "//",
+        "TEXPOOL = .;" + TEXCACHEROOT + "//",
+        "% Memory parameters",
+        "main_memory = 5000000",
+        "extra_mem_top = 2000000",
+        "extra_mem_bot = 2000000",
+        "font_mem_size = 8000000",
+        "pool_size = 6250000",
+        "buf_size = 200000",
+        "hash_extra = 600000",
+        "save_size = 80000",
+        "stack_size = 5000",
+        "trie_size = 1000000",
+        "hyph_size = 8191",
+        "nest_size = 500",
+        "param_size = 10000",
+        "max_strings = 500000",
+        "string_vacancies = 90000",
+        ""
+    ].join("\n");
+    FS.writeFile(WORKROOT + "/texmf.cnf", texmfCnf);
+}
+
+// Run _main() directly, bypassing Emscripten's callMain().
+// CRITICAL: We must NOT use Emscripten's callMain because it calls exitJS()
+// which invokes exitRuntime(), setting runtimeExited=true. This flag is
+// JavaScript-side state that prepareExecutionContext() does NOT restore
+// (it only restores WASM heap memory). Subsequent _compileLaTeX() calls
+// then fail because the Emscripten runtime thinks it's already shut down.
+//
+// Instead, we call _main() directly and catch ExitStatus ourselves — exactly
+// like the original base format build code on the main branch.
+//
+// args should NOT include the program name — it's prepended automatically.
+// IMPORTANT: Do NOT name this function "callMain" — that would shadow
+// Emscripten's version and break its internal uses.
+function runMain(programName, args) {
+    var savedProgram = thisProgram;
+    thisProgram = "./" + programName;
+
+    // Build argv: [programName, ...args, NULL]
+    var fullArgs = [programName].concat(args);
+    var argPtrs = fullArgs.map(allocateString);
+    argPtrs.push(0); // NULL terminator
+    var argv = _malloc(argPtrs.length * 4);
+    var dv = new DataView(wasmMemory.buffer);
+    for (var i = 0; i < argPtrs.length; i++) {
+        dv.setUint32(argv + i * 4, argPtrs[i], true);
+    }
+
+    var status;
+    try {
+        status = _main(fullArgs.length, argv);
+    } catch(e) {
+        if (e instanceof ExitStatus) {
+            status = e.status;
+        } else {
+            _free(argv);
+            thisProgram = savedProgram;
+            throw e;
+        }
+    }
+    _free(argv);
+    thisProgram = savedProgram;
+    return status;
+}
+
+// --- Preamble snapshot -------------------------------------------------------
+
+self._preambleHash = "";
+self._preambleFmtData = null;
+self._fmtIsNative = false;    // true only when base format was built by our WASM binary
+self._mainCallSafe = true;    // false after first _compileLaTeX() — _main() can't be called after that
+
+// Split TeX source into preamble (before \begin{document}) and body (including it).
+function extractPreamble(texSource) {
+    var marker = "\\begin{document}";
+    var searchFrom = 0;
+    while (true) {
+        var idx = texSource.indexOf(marker, searchFrom);
+        if (idx === -1) return null;
+        // Skip if \begin{document} is inside a comment
+        var lineStart = texSource.lastIndexOf("\n", idx - 1) + 1;
+        if (texSource.substring(lineStart, idx).indexOf("%") >= 0) {
+            searchFrom = idx + marker.length;
+            continue;
+        }
+        return {
+            preamble: texSource.substring(0, idx),
+            body: texSource.substring(idx),
+            preambleLineCount: texSource.substring(0, idx).split("\n").length
+        };
+    }
+}
+
+// Simple string hash (djb2 variant). Returns a base-36 string.
+function simpleHash(str) {
+    var h = 0;
+    for (var i = 0; i < str.length; i++) {
+        h = ((h << 5) - h) + str.charCodeAt(i);
+        h = h | 0;
+    }
+    return h.toString(36);
+}
+
+// Build a format file from the preamble text (everything before \begin{document}).
+// Returns the format binary (Uint8Array) on success, null on failure.
+function buildPreambleFormat(preambleText) {
+    prepareExecutionContext();
+    writeTexmfCnf();
+    try { FS.writeFile(WORKROOT + "/pdflatex", ""); } catch(e) {}
+
+    // Base format must be available for -ini "&pdflatex"
+    if (self._fmtData) {
+        FS.writeFile(TEXCACHEROOT + "/pdflatex.fmt", self._fmtData);
+        texlive200_cache["10/pdflatex.fmt"] = TEXCACHEROOT + "/pdflatex.fmt";
+        FS.writeFile(WORKROOT + "/pdflatex.fmt", self._fmtData);
+    }
+
+    // preamble + \dump (no \begin{document})
+    FS.writeFile(WORKROOT + "/_preamble.tex", preambleText + "\\dump\n");
+
+    var status = runMain("pdflatex", ["-ini", "-interaction=nonstopmode",
+                                       "&pdflatex", "_preamble.tex"]);
+
+    if (status === 0) {
+        // Check build log for errors that indicate a broken format
+        if (self.memlog.includes("Fatal format file error") ||
+            self.memlog.includes("I can\\'t go on")) {
+            return null;
+        }
+        try {
+            var fmt = FS.readFile(WORKROOT + "/_preamble.fmt", { encoding: "binary" });
+            if (self._fmtData && fmt.length < self._fmtData.length * 0.5) {
+                return null;
+            }
+            return fmt;
+        } catch(e) { return null; }
+    }
+    return null;
+}
+
 // --- TexLive package fetching ------------------------------------------------
 //
 // When pdfTeX needs a file (font, style, etc.) that isn't in the virtual
@@ -207,7 +362,7 @@ var texlive200_cache = {};
 
 function kpse_find_file_impl(nameptr, format, _mustexist) {
     var reqname = UTF8ToString(nameptr);
-    console.log("[kpse] find_file: " + reqname + " (format=" + format + ")");
+    // console.log("[kpse] find_file: " + reqname + " (format=" + format + ")");
 
     // Only fetch bare filenames, not paths
     if (reqname.includes("/")) {
@@ -232,7 +387,7 @@ function kpse_find_file_impl(nameptr, format, _mustexist) {
     xhr.timeout = 150000;
     xhr.responseType = "arraybuffer";
 
-    console.log("Start downloading texlive file " + remote_url);
+    // console.log("Start downloading texlive file " + remote_url);
 
     try {
         xhr.send();
@@ -241,8 +396,7 @@ function kpse_find_file_impl(nameptr, format, _mustexist) {
         return 0;
     }
 
-    console.log("[kpse] XHR status=" + xhr.status + " statusText=" + xhr.statusText +
-                " responseSize=" + (xhr.response ? xhr.response.byteLength : "null"));
+    // console.log("[kpse] XHR status=" + xhr.status + " responseSize=" + (xhr.response ? xhr.response.byteLength : "null"));
 
     if (xhr.status === 200) {
         var arraybuffer = xhr.response;
@@ -259,7 +413,7 @@ function kpse_find_file_impl(nameptr, format, _mustexist) {
         if (format === 10) {
             var wdpath = WORKROOT + "/" + reqname;
             FS.writeFile(wdpath, data);
-            console.log("[kpse] Format file also written to " + wdpath);
+            // console.log("[kpse] Format file also written to " + wdpath);
         }
 
         texlive200_cache[cacheKey] = savepath;
@@ -268,7 +422,7 @@ function kpse_find_file_impl(nameptr, format, _mustexist) {
     } else if (xhr.status === 301 || xhr.status === 404) {
         // 301: TexLive-Ondemand convention for "file not found"
         // 404: static hosting (gh-pages) for missing files
-        console.log("TexLive File not exists " + remote_url);
+        // console.log("TexLive File not exists " + remote_url);
         texlive404_cache[cacheKey] = 1;
         return 0;
     }
@@ -307,7 +461,7 @@ function kpse_find_pk_impl(nameptr, dpi) {
     xhr.timeout = 150000;
     xhr.responseType = "arraybuffer";
 
-    console.log("Start downloading PK font " + remote_url);
+    // console.log("Start downloading PK font " + remote_url);
 
     try {
         xhr.send();
@@ -325,7 +479,7 @@ function kpse_find_pk_impl(nameptr, dpi) {
         pk200_cache[cacheKey] = savepath;
         return allocateString(savepath);
     } else if (xhr.status === 301 || xhr.status === 404) {
-        console.log("PK Font not exists " + remote_url);
+        // console.log("PK Font not exists " + remote_url);
         pk404_cache[cacheKey] = 1;
         return 0;
     }
@@ -352,152 +506,165 @@ function compileLaTeXRoutine() {
     var setMainFunction = cwrap("setMainEntry", "number", ["string"]);
     setMainFunction(self.mainfile);
 
-    // Run pdfTeX compilation
-    // pdfTeX's main() calls exit() when done, which Emscripten turns into
-    // a thrown ExitStatus exception. We catch it to extract the exit code.
-    console.log("[compile] texlive_endpoint=" + self.texlive_endpoint + " mainfile=" + self.mainfile);
-    console.log("[compile] /work/ contents:", JSON.stringify(FS.readdir(WORKROOT)));
-    console.log("[compile] memlog before main():", JSON.stringify(self.memlog));
-
     // kpathsea does lstat(argv[0]) to find the program directory.
-    // argv[0] is "pdflatex" which resolves to "./pdflatex" (cwd = /work).
-    // Create a dummy file so the lstat succeeds.
     try { FS.writeFile(WORKROOT + "/pdflatex", ""); } catch(e) {}
 
     // Build format file on first compilation.
-    // The pre-built swiftlatexpdftex.fmt from the original SwiftLaTeX is
-    // INCOMPATIBLE with our custom SyncTeX build (different string pool).
-    // We must build a new one using our own binary via pdftex -ini.
-    // LaTeX requires e-TeX — the "*" prefix in "*pdflatex.ini" activates it.
-    // Since compileFormat() in wasm-entry.c doesn't use "*", we call _main()
-    // directly with the correct arguments.
     if (!self._fmtData) {
-        console.log("[compile] Building format file with e-TeX (first run)...");
         prepareExecutionContext();
         try { FS.writeFile(WORKROOT + "/pdfetex", ""); } catch(e) {}
+        writeTexmfCnf();
 
-        // Write texmf.cnf so kpathsea can find it. Without this, pdfTeX uses
-        // tiny compiled-in defaults (trie_size=20000) which can't load all
-        // hyphenation patterns from language.dat.
-        var texmfCnf = [
-            "% texmf.cnf for WASM pdfTeX — matches TeX Live 2020 defaults",
-            "% Path configuration — kpathsea needs these to find files in CWD",
-            "TEXINPUTS = .;" + TEXCACHEROOT + "//",
-            "TFMFONTS = .;" + TEXCACHEROOT + "//",
-            "T1FONTS = .;" + TEXCACHEROOT + "//",
-            "AFMFONTS = .;" + TEXCACHEROOT + "//",
-            "TEXFONTMAPS = .;" + TEXCACHEROOT + "//",
-            "ENCFONTS = .;" + TEXCACHEROOT + "//",
-            "VFFONTS = .;" + TEXCACHEROOT + "//",
-            "TEXFORMATS = .;" + TEXCACHEROOT + "//",
-            "TEXPOOL = .;" + TEXCACHEROOT + "//",
-            "% Memory parameters",
-            "main_memory = 5000000",
-            "extra_mem_top = 2000000",
-            "extra_mem_bot = 2000000",
-            "font_mem_size = 8000000",
-            "pool_size = 6250000",
-            "buf_size = 200000",
-            "hash_extra = 600000",
-            "save_size = 80000",
-            "stack_size = 5000",
-            "trie_size = 1000000",
-            "hyph_size = 8191",
-            "nest_size = 500",
-            "param_size = 10000",
-            "max_strings = 500000",
-            "string_vacancies = 90000",
-            ""
-        ].join("\n");
-        FS.writeFile(WORKROOT + "/texmf.cnf", texmfCnf);
-
-        // Build argv array on the WASM heap for: pdfetex -ini -interaction=nonstopmode *pdflatex.ini
-        var fmtArgs = ["pdfetex", "-ini", "-interaction=nonstopmode", "*pdflatex.ini"];
-        var fmtArgPtrs = fmtArgs.map(allocateString);
-        fmtArgPtrs.push(0); // NULL terminator
-        var fmtArgv = _malloc(fmtArgPtrs.length * 4);
-        var dv = new DataView(wasmMemory.buffer);
-        for (var fi = 0; fi < fmtArgPtrs.length; fi++) {
-            dv.setUint32(fmtArgv + fi * 4, fmtArgPtrs[fi], true);
-        }
-
-        var fmtStatus;
-        try {
-            fmtStatus = _main(fmtArgs.length, fmtArgv);
-        } catch(e) {
-            if (e instanceof ExitStatus) {
-                fmtStatus = e.status;
-            } else {
-                throw e;
-            }
-        }
-        _free(fmtArgv);
+        var fmtStatus = runMain("pdfetex", ["-ini", "-interaction=nonstopmode", "*pdflatex.ini"]);
 
         if (fmtStatus === 0) {
             try {
                 self._fmtData = FS.readFile(WORKROOT + "/pdflatex.fmt", { encoding: "binary" });
                 self._fmtBuiltThisSession = true;
-                console.log("[compile] Format built: " + self._fmtData.length + " bytes");
+                self._fmtIsNative = true;
             } catch(e) {
                 console.error("[compile] Format build succeeded but can't read output: " + e);
             }
         } else {
-            console.error("[compile] Format build FAILED (status=" + fmtStatus + "): " + self.memlog);
-            // Fall back to preloaded format if available
             if (self._fmtFallback) {
                 self._fmtData = self._fmtFallback;
-                console.log("[compile] Using fallback format: " + self._fmtData.length + " bytes");
             }
         }
-        // Re-prepare for the actual compilation
         prepareExecutionContext();
         try { FS.writeFile(WORKROOT + "/pdflatex", ""); } catch(e) {}
     }
 
-    // Write cached format to TEXCACHEROOT and pre-populate the kpse cache.
-    // The binary's compiled-in format name is "swiftlatexpdftex", so pdfTeX
-    // asks kpathsea for swiftlatexpdftex.fmt. Without this cache entry, the
-    // JS hook would fetch the OLD incompatible format from the texlive server.
-    if (self._fmtData) {
-        FS.writeFile(TEXCACHEROOT + "/swiftlatexpdftex.fmt", self._fmtData);
-        texlive200_cache["10/swiftlatexpdftex.fmt"] = TEXCACHEROOT + "/swiftlatexpdftex.fmt";
-        // Also cache under pdflatex.fmt in case &pdflatex is processed
-        FS.writeFile(TEXCACHEROOT + "/pdflatex.fmt", self._fmtData);
-        texlive200_cache["10/pdflatex.fmt"] = TEXCACHEROOT + "/pdflatex.fmt";
+    // --- Preamble snapshot ---------------------------------------------------
+    // Detect preamble changes and build a cached format to speed up body edits.
+    // Key: compilation ALWAYS goes through _compileLaTeX() (not _main()) —
+    // we only swap which format file gets loaded via the kpse cache.
+    var usedPreamble = false;
+    var texSource = null;
+    try { texSource = FS.readFile(WORKROOT + "/" + self.mainfile, { encoding: "utf8" }); }
+    catch(e) {}
+
+    var split = texSource ? extractPreamble(texSource) : null;
+
+    if (split && self._fmtIsNative) {
+        var hash = simpleHash(split.preamble);
+        if (hash === self._preambleHash && self._preambleFmtData) {
+            // Preamble cache HIT — reuse cached preamble format
+            console.log("[preamble] HIT");
+            usedPreamble = true;
+        } else if (self._mainCallSafe) {
+            // Preamble cache MISS — build new preamble format.
+            // Only safe before the first _compileLaTeX() call. After that,
+            // _main() corrupts Emscripten JS-side state that _compileLaTeX() needs.
+            console.log("[preamble] MISS");
+            var fmt = buildPreambleFormat(split.preamble);
+            if (fmt) {
+                self._preambleFmtData = fmt;
+                self._preambleHash = hash;
+                usedPreamble = true;
+                prepareExecutionContext();
+                try { FS.writeFile(WORKROOT + "/pdflatex", ""); } catch(e) {}
+            } else {
+                prepareExecutionContext();
+                try { FS.writeFile(WORKROOT + "/pdflatex", ""); } catch(e) {}
+            }
+        }
+
+        if (usedPreamble) {
+            // Write padded body to preserve SyncTeX line numbers
+            var padding = "";
+            for (var i = 1; i < split.preambleLineCount; i++) padding += "%\n";
+            FS.writeFile(WORKROOT + "/" + self.mainfile, padding + split.body);
+        }
     }
 
-    // Final verification: are format files really in MEMFS?
-    ["pdflatex.fmt", "swiftlatexpdftex.fmt"].forEach(function(n) {
-        try {
-            var s = FS.stat(TEXCACHEROOT + "/" + n);
-            console.log("[compile] VERIFY " + n + ": " + s.size + " bytes in /tex/");
-        } catch(e) {
-            console.log("[compile] VERIFY " + n + ": MISSING from /tex/");
-        }
-    });
-    console.log("[compile] kpse cache keys: " + JSON.stringify(Object.keys(texlive200_cache).filter(function(k) { return k.indexOf("fmt") >= 0; })));
+    // Write format to kpse cache — preamble format if available, else base format.
+    // _compileLaTeX() loads "swiftlatexpdftex.fmt" via kpathsea, so swapping the
+    // file in the cache transparently switches between full and preamble formats.
+    var fmtToUse = usedPreamble ? self._preambleFmtData : self._fmtData;
+    if (fmtToUse) {
+        FS.writeFile(TEXCACHEROOT + "/swiftlatexpdftex.fmt", fmtToUse);
+        texlive200_cache["10/swiftlatexpdftex.fmt"] = TEXCACHEROOT + "/swiftlatexpdftex.fmt";
+        FS.writeFile(TEXCACHEROOT + "/pdflatex.fmt", fmtToUse);
+        texlive200_cache["10/pdflatex.fmt"] = TEXCACHEROOT + "/pdflatex.fmt";
+        // Also write to WORKROOT — open_fmt_file() tries fopen() in CWD first,
+        // before falling back to kpathsea. _compileLaTeX() passes "&pdflatex"
+        // so pdfTeX looks for pdflatex.fmt. Without this write, a stale base
+        // pdflatex.fmt left by buildPreambleFormat() would be loaded instead.
+        FS.writeFile(WORKROOT + "/pdflatex.fmt", fmtToUse);
+    }
 
+    // Re-set main entry right before compile (heap restores may have cleared it)
+    setMainFunction(self.mainfile);
+
+    // Compile — always use _compileLaTeX() for stability (never _main for compilation)
     var status;
     try {
         status = _compileLaTeX();
     } catch(e) {
         if (e instanceof ExitStatus) {
             status = e.status;
-            console.log("[compile] ExitStatus caught, code=" + status);
         } else {
             throw e;
         }
     }
-    console.log("[compile] memlog after main():", JSON.stringify(self.memlog));
+    // After the first _compileLaTeX(), _main() can no longer be called safely.
+    // _compileLaTeX() leaves JS-side Emscripten state that breaks _main().
+    self._mainCallSafe = false;
+
+    // Restore original main.tex after preamble compilation.
+    // The preamble path replaces main.tex with a padded body (% comment lines +
+    // \begin{document}...). Without restoring, a recompile (e.g. "Rerun to get
+    // cross-references right") would see the padded body instead of the original
+    // source, causing extractPreamble() to fail and the base format to be used
+    // against the partial body — producing \normalsize errors.
+    if (usedPreamble && texSource) {
+        FS.writeFile(WORKROOT + "/" + self.mainfile, texSource);
+    }
+
+    // If preamble compile failed or produced critical errors, fall back to full compile.
+    // In nonstopmode, pdfTeX can return status 0 even with massive errors (e.g. missing
+    // LaTeX kernel). Detect these by checking the log for telltale error patterns.
+    var preambleHasCriticalErrors = usedPreamble && (
+        self.memlog.includes("normalsize is not defined") ||
+        self.memlog.includes("Undefined control sequence")
+    );
+    if (usedPreamble && (status !== 0 || preambleHasCriticalErrors)) {
+        console.log("[preamble] fallback to full compile");
+        self._preambleFmtData = null;
+        self._preambleHash = "";
+        usedPreamble = false;
+
+        prepareExecutionContext();
+        try { FS.writeFile(WORKROOT + "/pdflatex", ""); } catch(e) {}
+
+        // Restore original file content and base format
+        FS.writeFile(WORKROOT + "/" + self.mainfile, texSource);
+        if (self._fmtData) {
+            FS.writeFile(TEXCACHEROOT + "/swiftlatexpdftex.fmt", self._fmtData);
+            texlive200_cache["10/swiftlatexpdftex.fmt"] = TEXCACHEROOT + "/swiftlatexpdftex.fmt";
+            FS.writeFile(TEXCACHEROOT + "/pdflatex.fmt", self._fmtData);
+            texlive200_cache["10/pdflatex.fmt"] = TEXCACHEROOT + "/pdflatex.fmt";
+        }
+
+        setMainFunction(self.mainfile);
+        try {
+            status = _compileLaTeX();
+        } catch(e) {
+            if (e instanceof ExitStatus) {
+                status = e.status;
+            } else {
+                throw e;
+            }
+        }
+    }
+
+    if (usedPreamble) console.log("[preamble] compiled with cached format");
 
     if (status === 0) {
-        // Compilation succeeded — read the PDF
         var pdfArrayBuffer = null;
 
-        // BibTeX pass (for bibliography support)
         _compileBibtex();
 
-        // Derive output filenames from the main .tex file
         var baseName = self.mainfile.substr(0, self.mainfile.length - 4);
         var pdfPath = WORKROOT + "/" + baseName + ".pdf";
 
@@ -515,52 +682,37 @@ function compileLaTeXRoutine() {
             return;
         }
 
-        // ---------------------------------------------------------------
-        // SyncTeX extraction — NEW
-        // ---------------------------------------------------------------
-        // pdfTeX with SyncTeX enabled produces a .synctex or .synctex.gz
-        // file alongside the PDF. We try to read it and include it in the
-        // response so the editor can do source<->PDF position mapping.
-        //
-        // The synctex data is sent as a binary Uint8Array. The host-side
-        // code is responsible for parsing it (using a SyncTeX parser).
+        // SyncTeX extraction
         var synctexData = null;
         var synctexPath = WORKROOT + "/" + baseName + ".synctex";
         var synctexGzPath = WORKROOT + "/" + baseName + ".synctex.gz";
 
         try {
-            // Try uncompressed first
             synctexData = FS.readFile(synctexPath, { encoding: "binary" });
         } catch(e) {
-            // Try gzipped version
             try {
                 synctexData = FS.readFile(synctexGzPath, { encoding: "binary" });
             } catch(e2) {
-                // SyncTeX file not produced — this is normal if synctex is
-                // disabled or compilation had issues. Not an error.
-                console.log("No synctex file found (this is OK if synctex is disabled)");
+                console.log("No synctex file found");
             }
         }
 
-        // Build the response message
         var response = {
             "result": "ok",
             "status": status,
             "log": self.memlog,
             "pdf": pdfArrayBuffer.buffer,
-            "cmd": "compile"
+            "cmd": "compile",
+            "preambleSnapshot": usedPreamble
         };
 
-        // Transferable objects for zero-copy postMessage
         var transferables = [pdfArrayBuffer.buffer];
 
-        // Include synctex data if available
         if (synctexData !== null) {
             response["synctex"] = synctexData.buffer;
             transferables.push(synctexData.buffer);
         }
 
-        // Include format data when freshly built (so the host can save it)
         if (self._fmtBuiltThisSession) {
             var fmtCopy = new Uint8Array(self._fmtData);
             response["format"] = fmtCopy.buffer;
@@ -571,13 +723,13 @@ function compileLaTeXRoutine() {
         self.postMessage(response, transferables);
 
     } else {
-        // Compilation failed
         console.error("Compilation failed, with status code " + status);
         self.postMessage({
             "result": "failed",
             "status": status,
             "log": self.memlog,
-            "cmd": "compile"
+            "cmd": "compile",
+            "preambleSnapshot": false
         });
     }
 }
@@ -700,7 +852,7 @@ self["onmessage"] = function(ev) {
         // _fmtData so the worker still tries to build a fresh format first.
         var fmtData = new Uint8Array(data["data"]);
         self._fmtFallback = fmtData;
-        console.log("[loadformat] Fallback format loaded: " + fmtData.length + " bytes");
+        // console.log("[loadformat] Fallback format loaded: " + fmtData.length + " bytes");
         self.postMessage({ "result": "ok", "cmd": "loadformat" });
     } else if (cmd === "grace") {
         console.error("Gracefully Close");

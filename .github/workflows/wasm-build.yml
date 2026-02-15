@@ -2,7 +2,7 @@ name: WASM Build
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, 'iter4-*']
     paths: ['wasm-build/**']
 
 jobs:
@@ -40,6 +40,15 @@ jobs:
         run: |
           rm -rf /tmp/.buildx-cache
           mv /tmp/.buildx-cache-new /tmp/.buildx-cache
+
+      - name: Smoke test WASM artifacts
+        run: |
+          node -e "
+            const fs = require('fs');
+            const wasm = fs.readFileSync('wasm-build/dist/swiftlatexpdftex.wasm');
+            if (!WebAssembly.validate(wasm)) process.exit(1);
+            console.log('WASM OK (' + wasm.length + ' bytes)');
+          "
 
       - name: Upload WASM artifacts
         uses: actions/upload-artifact@v4

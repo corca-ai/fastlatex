@@ -125,7 +125,9 @@ export class SwiftLatexEngine implements TexEngine {
           console.log(`[engine] Compatible format file downloaded (${blob.size} bytes)`)
         }
 
-        resolve({ success, pdf, log, errors, compileTime, synctex })
+        const preambleSnapshot = !!data.preambleSnapshot
+
+        resolve({ success, pdf, log, errors, compileTime, synctex, preambleSnapshot })
       }
 
       this.worker!.postMessage({ cmd: 'compilelatex' })

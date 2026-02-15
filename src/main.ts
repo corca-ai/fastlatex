@@ -99,6 +99,8 @@ function maybeRecompile(result: CompileResult): void {
 function onCompileResult(result: CompileResult): void {
   perf.end('compile')
 
+  const detail = result.preambleSnapshot ? '(cached preamble)' : undefined
+
   if (result.success && result.pdf) {
     for (const path of fs.listFiles()) {
       const file = fs.getFile(path)
@@ -113,7 +115,7 @@ function onCompileResult(result: CompileResult): void {
     pdfViewer.render(result.pdf).then(() => {
       perf.end('render')
       perf.end('total')
-      setStatus('ready')
+      setStatus('ready', detail)
     })
   } else {
     perf.end('total')
