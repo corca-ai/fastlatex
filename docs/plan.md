@@ -641,7 +641,6 @@ I3 기능 완성 후 품질 개선. 커밋 `83f3a2c`, `b4c1a08`.
 - [x] 줌 레벨 % 표시 + 더블클릭 100% 리셋
 
 **설계 개선**
-- [x] IndexedDB 영속화: `src/fs/persistent-fs.ts` + VirtualFS 통합 (500ms 디바운스 자동 저장)
 - [x] 에러 파서: overfull/underfull box 경고 파싱 + 헬퍼 함수 추출로 복잡도 개선
 
 ### 스킵/연기 항목
@@ -657,13 +656,12 @@ I3 기능 완성 후 품질 개선. 커밋 `83f3a2c`, `b4c1a08`.
 | `src/perf/metrics.ts` | 신규 |
 | `src/viewer/page-renderer.ts` | 신규 |
 | `src/ui/error-markers.ts` | 신규 |
-| `src/fs/persistent-fs.ts` | 신규 |
 | `e2e/perf-benchmark.spec.ts` | 신규 |
 | `src/viewer/pdf-viewer.ts` | 리팩터 (PageRenderer 위임, 가시 우선 렌더) |
 | `src/engine/compile-scheduler.ts` | 확장 (flush, perf marks) |
 | `src/engine/parse-errors.ts` | 확장 (box 경고, 헬퍼 추출) |
-| `src/fs/virtual-fs.ts` | 확장 (IndexedDB 통합) |
-| `src/main.ts` | 통합 (마커, 단축키, PDF 다운로드, 영속화) |
+| `src/fs/virtual-fs.ts` | 확장 |
+| `src/main.ts` | 통합 (마커, 단축키, PDF 다운로드) |
 
 ### KPI
 
@@ -671,13 +669,70 @@ I3 기능 완성 후 품질 개선. 커밋 `83f3a2c`, `b4c1a08`.
 |------|----------|----------|------|
 | 에러 인라인 표시 | 없음 | 동작 | ✅ |
 | Ctrl+S 즉시 컴파일 | 없음 | 동작 | ✅ |
-| 새로고침 후 내용 보존 | 불가 | 동작 | ✅ |
 | 렌더 시간 (첫 페이지) | ~184ms | < 50ms | 구현 완료, 측정 대기 |
 | 편집→첫 페이지 갱신 | ~700ms | < 400ms | 구현 완료, 측정 대기 |
 
 ---
 
-## Iteration 4 (4주) — 서버 fallback + 프로젝트 관리
+## Iteration 4 (6주) — Preamble snapshot + 컴파일 성능
+
+**사용자 가치:** "편집할 때마다 기다리는 시간이 절반으로 줄었다"
+
+pdfTeX WASM C 코드 수정 + Emscripten 재빌드 (I3 빌드 파이프라인 활용).
+
+* Emscripten WASM linear memory snapshot: preamble 처리 후 `Module.HEAP` 저장 → body 편집 시 복원
+* 캐시 키: preamble hash + package list
+* idle time에 예열 컴파일 (speculative warm-up)
+* 폰트/하이픈 패턴 로딩 캐시 강화
+
+**KPI:** 일반 논문(10-20p) 반복 편집 시 컴파일 시간 2-5x 개선
+
+---
+
+## Iteration 5 (8주) — Semantic Trace + LSP
+
+**사용자 가치:** "LaTeX가 IDE처럼 — 자동완성, 정확한 진단, go-to-definition"
+
+pdfTeX C 코드에 semantic trace 훅 추가 (매크로 확장 시점에 이벤트 emit).
+
+* 엔진 트레이스: labels/refs/cites/sections/includes를 구조화 이벤트로 스트리밍
+* LSP 기능: cite/label 자동완성, go-to-definition, find references, 구조 outline
+* 정적 파서가 아닌 엔진 실행 트레이스 기반 → LaTeX 특유의 매크로 확장도 정확하게 추적
+
+**KPI:** 자동완성 정확도 > 95%, go-to-definition 동작
+
+---
+
+## Iteration 6 (10주) — PDL + LiveView: 즉시 반응
+
+**사용자 가치:** "타이핑하면 50ms 내 페이지가 움직인다"
+
+pdfTeX `ship_out()`에 PDL 출력 드라이버 추가. WebGPU로 PDL 렌더.
+
+* PDL: glyph runs (font, glyph id, position) + images + vector paths + 소스 span
+* WebGPU 렌더러: glyph atlas, 타일링, 뷰포트 렌더, 스크롤/줌 60fps
+* "LiveView 즉시 반응" + 백그라운드 PDF 수렴 → 스왑/오버레이
+* Interruptible compilation: `emscripten_sleep()` yield points (Asyncify)
+
+**KPI:** Keystroke→화면 변화 30-80ms 달성
+
+---
+
+## Iteration 7 (8주) — 대형 문서 + 안정화
+
+**사용자 가치:** "100페이지 논문도 쾌적"
+
+* `\include` 단위 부분 컴파일: 현재 챕터만 즉시 컴파일, 전체는 백그라운드
+* 또는 section 경계 체크포인트 (Preamble snapshot 확장)
+* PDF.js 캐시/타일링/프리페치 강화
+* arXiv급 코퍼스 회귀 테스트 파이프라인
+* `tex.lock` 도입 (패키지 버전 고정 + 재현성)
+
+**KPI:** 대형 문서 "현재 페이지" 업데이트 < 500ms, 실패율/크래시율 목표 달성
+
+---
+
+## Iteration 8 (4주) — 서버 fallback + 프로젝트 관리
 
 **사용자 가치:** "어떤 패키지/문서 크기여도 일단 된다" + 폴더 구조로 실제 프로젝트 관리 가능
 
@@ -702,7 +757,7 @@ WASM에서 실패하거나 지원하지 않는 패키지/엔진이 필요할 때
 
 ---
 
-## Iteration 5 (4주) — 템플릿 + 패키지 확장
+## Iteration 9 (4주) — 템플릿 + 패키지 확장
 
 **사용자 가치:** "학회 템플릿 골라서 바로 시작"
 
@@ -711,64 +766,6 @@ WASM에서 실패하거나 지원하지 않는 패키지/엔진이 필요할 때
 * 호스트 제품과의 통합 인터페이스 정의 (프로젝트 로드/저장 API)
 
 **KPI:** 템플릿 온보딩 1분 이내
-
----
-
-## Iteration 6 (6주) — Preamble snapshot + 컴파일 성능
-
-**사용자 가치:** "편집할 때마다 기다리는 시간이 절반으로 줄었다"
-
-pdfTeX WASM C 코드 수정 + Emscripten 재빌드 (I3 빌드 파이프라인 활용).
-
-* Emscripten WASM linear memory snapshot: preamble 처리 후 `Module.HEAP` 저장 → body 편집 시 복원
-* 캐시 키: preamble hash + package list
-* idle time에 예열 컴파일 (speculative warm-up)
-* 폰트/하이픈 패턴 로딩 캐시 강화
-
-**KPI:** 일반 논문(10-20p) 반복 편집 시 컴파일 시간 2-5x 개선
-
----
-
-## Iteration 7 (8주) — Semantic Trace + LSP
-
-**사용자 가치:** "LaTeX가 IDE처럼 — 자동완성, 정확한 진단, go-to-definition"
-
-pdfTeX C 코드에 semantic trace 훅 추가 (매크로 확장 시점에 이벤트 emit).
-
-* 엔진 트레이스: labels/refs/cites/sections/includes를 구조화 이벤트로 스트리밍
-* LSP 기능: cite/label 자동완성, go-to-definition, find references, 구조 outline
-* 정적 파서가 아닌 엔진 실행 트레이스 기반 → LaTeX 특유의 매크로 확장도 정확하게 추적
-
-**KPI:** 자동완성 정확도 > 95%, go-to-definition 동작
-
----
-
-## Iteration 8 (10주) — PDL + LiveView: 즉시 반응
-
-**사용자 가치:** "타이핑하면 50ms 내 페이지가 움직인다"
-
-pdfTeX `ship_out()`에 PDL 출력 드라이버 추가. WebGPU로 PDL 렌더.
-
-* PDL: glyph runs (font, glyph id, position) + images + vector paths + 소스 span
-* WebGPU 렌더러: glyph atlas, 타일링, 뷰포트 렌더, 스크롤/줌 60fps
-* "LiveView 즉시 반응" + 백그라운드 PDF 수렴 → 스왑/오버레이
-* Interruptible compilation: `emscripten_sleep()` yield points (Asyncify)
-
-**KPI:** Keystroke→화면 변화 30-80ms 달성
-
----
-
-## Iteration 9 (8주) — 대형 문서 + 안정화
-
-**사용자 가치:** "100페이지 논문도 쾌적"
-
-* `\include` 단위 부분 컴파일: 현재 챕터만 즉시 컴파일, 전체는 백그라운드
-* 또는 section 경계 체크포인트 (Preamble snapshot 확장)
-* PDF.js 캐시/타일링/프리페치 강화
-* arXiv급 코퍼스 회귀 테스트 파이프라인
-* `tex.lock` 도입 (패키지 버전 고정 + 재현성)
-
-**KPI:** 대형 문서 "현재 페이지" 업데이트 < 500ms, 실패율/크래시율 목표 달성
 
 ---
 
@@ -801,6 +798,6 @@ I3b 완료 기준:
 - 84 단위 테스트 + 19 E2E 테스트 통과
 
 I4 착수 전 확인 사항:
-1. **서버 API 설계**: REST vs WebSocket, 엔드포인트 구조, 인증
-2. **프로젝트 구조 설계**: VirtualFS 폴더 확장, IndexedDB 스키마
-3. **이미지 업로드 UX**: drag & drop → VirtualFS → engine writeFile 파이프라인
+1. **Emscripten Asyncify 조사**: `emscripten_sleep()` 삽입 가능 여부, 바이너리 크기 영향 측정
+2. **WASM memory snapshot PoC**: `Module.HEAP` 저장/복원 → preamble 스킵 프로토타입
+3. **preamble 경계 감지**: `\begin{document}` 시점에 snapshot 트리거하는 C 코드 훅 설계

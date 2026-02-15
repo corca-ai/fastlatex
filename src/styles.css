@@ -130,9 +130,14 @@ body {
 
 #error-log-panel .log-entry {
   padding: 2px 12px;
-  cursor: pointer;
   white-space: pre-wrap;
   word-break: break-all;
+  user-select: text;
+  cursor: text;
+}
+
+#error-log-panel .log-entry.clickable {
+  cursor: pointer;
 }
 
 #error-log-panel .log-entry:hover {

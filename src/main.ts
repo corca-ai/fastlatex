@@ -59,35 +59,54 @@ const errorLog = new ErrorLog(errorLogContainer, (line) => {
 })
 
 // --- Compile result handler ---
+let pendingRecompile = false
+
+function handleSynctex(result: CompileResult): void {
+  if (result.synctex) {
+    perf.mark('synctex-parse')
+    synctexParser
+      .parse(result.synctex)
+      .then((synctexData) => {
+        perf.end('synctex-parse')
+        pdfViewer.setSynctexData(synctexData)
+      })
+      .catch((err) => {
+        perf.end('synctex-parse')
+        console.warn('SyncTeX parse failed, using text-mapper fallback:', err)
+        pdfViewer.setSynctexData(null)
+      })
+  } else {
+    pdfViewer.setSynctexData(null)
+  }
+}
+
+function maybeRecompile(result: CompileResult): void {
+  if (
+    !pendingRecompile &&
+    result.success &&
+    result.log?.includes('Rerun to get cross-references right')
+  ) {
+    pendingRecompile = true
+    engine.compile().then((r) => {
+      pendingRecompile = false
+      onCompileResult(r)
+    })
+  } else {
+    pendingRecompile = false
+  }
+}
+
 function onCompileResult(result: CompileResult): void {
   perf.end('compile')
 
   if (result.success && result.pdf) {
-    // Update source content for text-mapper fallback
     for (const path of fs.listFiles()) {
       const file = fs.getFile(path)
       if (file && typeof file.content === 'string') {
         pdfViewer.setSourceContent(path, file.content)
       }
     }
-
-    // Parse SyncTeX data if available (preferred over text-mapper)
-    if (result.synctex) {
-      perf.mark('synctex-parse')
-      synctexParser
-        .parse(result.synctex)
-        .then((synctexData) => {
-          perf.end('synctex-parse')
-          pdfViewer.setSynctexData(synctexData)
-        })
-        .catch((err) => {
-          perf.end('synctex-parse')
-          console.warn('SyncTeX parse failed, using text-mapper fallback:', err)
-          pdfViewer.setSynctexData(null)
-        })
-    } else {
-      pdfViewer.setSynctexData(null)
-    }
+    handleSynctex(result)
 
     setStatus('rendering')
     perf.mark('render')
@@ -101,8 +120,9 @@ function onCompileResult(result: CompileResult): void {
     setStatus(result.errors.length > 0 ? 'error' : 'ready')
   }
 
-  errorLog.update(result.errors, result.log)
+  errorLog.update(result.errors)
   setErrorMarkers(editor, result.errors)
+  maybeRecompile(result)
 }
 
 // --- Compile Scheduler ---
@@ -231,19 +251,6 @@ async function init(): Promise<void> {
   setStatus('loading')
 
   try {
-    // Restore persisted files (if any) before engine init
-    const hadPersisted = await fs.loadPersisted()
-    if (hadPersisted) {
-      const content = fs.readFile('main.tex')
-      if (content && typeof content === 'string') {
-        setEditorContent(editor, content)
-        editor.onDidChangeModelContent(() => {
-          onEditorChange(editor.getValue())
-        })
-      }
-    }
-    fs.enablePersistence()
-
     await engine.init()
 
     setStatus('ready')

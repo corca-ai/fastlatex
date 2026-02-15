@@ -158,29 +158,8 @@ export class PdfViewer {
 
     this.attachInverseSearch(firstResult.canvas, visiblePage)
 
-    // Create placeholders for pages we haven't rendered yet
-    const wrappers = new Array<HTMLElement>(numPages)
-    for (let i = 1; i <= numPages; i++) {
-      if (i === visiblePage) {
-        wrappers[i - 1] = firstResult.wrapper
-      } else {
-        const placeholder = document.createElement('div')
-        placeholder.className = 'pdf-page-container'
-        placeholder.dataset.pageNum = String(i)
-        // Match dimensions to avoid layout shift
-        placeholder.style.width = `${firstResult.wrapper.offsetWidth}px`
-        placeholder.style.height = `${firstResult.wrapper.offsetHeight}px`
-        wrappers[i - 1] = placeholder
-      }
-    }
-
-    const fragment = document.createDocumentFragment()
-    for (const w of wrappers) fragment.appendChild(w)
-
-    const scrollTop = this.container.scrollTop
-    this.pagesContainer.replaceChildren(fragment)
-    this.container.scrollTop = scrollTop
-    this.observePages()
+    const wrappers = this.buildPageWrappers(numPages, visiblePage, firstResult.wrapper)
+    this.swapPages(wrappers, visiblePage)
 
     // Phase 2: Render remaining pages in the background
     for (let i = 1; i <= numPages; i++) {
@@ -217,6 +196,47 @@ export class PdfViewer {
       }
       if (loc) this.onInverseSearch(loc)
     })
+  }
+
+  /** Build page wrapper elements (rendered page + placeholders) */
+  private buildPageWrappers(
+    numPages: number,
+    visiblePage: number,
+    renderedWrapper: HTMLElement,
+  ): HTMLElement[] {
+    const wrappers = new Array<HTMLElement>(numPages)
+    for (let i = 1; i <= numPages; i++) {
+      if (i === visiblePage) {
+        wrappers[i - 1] = renderedWrapper
+      } else {
+        const placeholder = document.createElement('div')
+        placeholder.className = 'pdf-page-container'
+        placeholder.dataset.pageNum = String(i)
+        placeholder.style.width = `${renderedWrapper.offsetWidth}px`
+        placeholder.style.height = `${renderedWrapper.offsetHeight}px`
+        wrappers[i - 1] = placeholder
+      }
+    }
+    return wrappers
+  }
+
+  /** Swap page DOM and restore scroll position within the current page */
+  private swapPages(wrappers: HTMLElement[], visiblePage: number): void {
+    const fragment = document.createDocumentFragment()
+    for (const w of wrappers) fragment.appendChild(w)
+
+    const oldPageEl = this.pagesContainer.querySelector(
+      `.pdf-page-container[data-page-num="${visiblePage}"]`,
+    ) as HTMLElement | null
+    const inPageOffset = oldPageEl ? this.container.scrollTop - oldPageEl.offsetTop : 0
+
+    this.pagesContainer.replaceChildren(fragment)
+
+    const target = wrappers[visiblePage - 1]
+    if (target) {
+      this.container.scrollTop = target.offsetTop + inPageOffset
+    }
+    this.observePages()
   }
 
   /** Track which page is most visible via IntersectionObserver */

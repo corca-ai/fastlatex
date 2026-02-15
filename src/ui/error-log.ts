@@ -9,7 +9,7 @@ export class ErrorLog {
     this.onClickError = onClickError
   }
 
-  update(errors: TexError[], log: string): void {
+  update(errors: TexError[]): void {
     this.container.innerHTML = ''
 
     // Header
@@ -51,20 +51,13 @@ export class ErrorLog {
         entry.textContent = `${lineStr}${err.message}`
 
         if (err.line > 0) {
+          entry.classList.add('clickable')
           entry.onclick = () => this.onClickError(err.line)
           entry.title = 'Click to jump to line'
         }
 
         this.container.appendChild(entry)
       }
-    } else if (log) {
-      // Show raw log as a single entry when no parsed errors
-      const entry = document.createElement('div')
-      entry.className = 'log-entry'
-      // Show last meaningful lines of log
-      const lastLines = log.split('\n').slice(-20).join('\n')
-      entry.textContent = lastLines
-      this.container.appendChild(entry)
     }
   }
 
