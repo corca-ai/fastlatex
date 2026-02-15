@@ -246,7 +246,8 @@ function kpse_find_file_impl(nameptr, format, _mustexist) {
 
     if (xhr.status === 200) {
         var arraybuffer = xhr.response;
-        var fileid = xhr.getResponseHeader("fileid");
+        // fileid header comes from texlive server; static hosting won't have it
+        var fileid = xhr.getResponseHeader("fileid") || reqname;
         var savepath = TEXCACHEROOT + "/" + fileid;
         var data = new Uint8Array(arraybuffer);
         FS.writeFile(savepath, data);
@@ -264,8 +265,9 @@ function kpse_find_file_impl(nameptr, format, _mustexist) {
         texlive200_cache[cacheKey] = savepath;
         var ptr = allocateString(savepath);
         return ptr;
-    } else if (xhr.status === 301) {
-        // Server returns 301 for "file not found" (TexLive-Ondemand convention)
+    } else if (xhr.status === 301 || xhr.status === 404) {
+        // 301: TexLive-Ondemand convention for "file not found"
+        // 404: static hosting (gh-pages) for missing files
         console.log("TexLive File not exists " + remote_url);
         texlive404_cache[cacheKey] = 1;
         return 0;
@@ -316,12 +318,13 @@ function kpse_find_pk_impl(nameptr, dpi) {
 
     if (xhr.status === 200) {
         var arraybuffer = xhr.response;
-        var fileid = xhr.getResponseHeader("fileid");
+        // pkid header comes from texlive server; static hosting won't have it
+        var fileid = xhr.getResponseHeader("pkid") || reqname;
         var savepath = TEXCACHEROOT + "/" + fileid;
         FS.writeFile(savepath, new Uint8Array(arraybuffer));
         pk200_cache[cacheKey] = savepath;
         return allocateString(savepath);
-    } else if (xhr.status === 301) {
+    } else if (xhr.status === 301 || xhr.status === 404) {
         console.log("PK Font not exists " + remote_url);
         pk404_cache[cacheKey] = 1;
         return 0;
