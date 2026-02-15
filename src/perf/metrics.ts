@@ -58,6 +58,7 @@ export function initPerfOverlay(): void {
   if (!new URLSearchParams(window.location.search).has('perf')) return
 
   const overlay = document.createElement('div')
+  overlay.id = 'perf-overlay'
   overlay.style.cssText = [
     'position:fixed',
     'bottom:4px',

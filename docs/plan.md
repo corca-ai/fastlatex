@@ -645,7 +645,7 @@ I3 기능 완성 후 품질 개선. 커밋 `83f3a2c`, `b4c1a08`.
 - [x] `src/perf/metrics.ts`: 편집→PDF 반영 전 구간 타이밍 수집
   - debounce 대기 시간, compile 시간, synctex-parse 시간, render 시간, total
   - `performance.now()` 기반 span 수집
-- [ ] E2E 벤치마크 테스트: 편집 후 PDF 반영까지 총 시간 측정 (자동화)
+- [x] E2E 벤치마크 테스트: `e2e/perf-benchmark.spec.ts` (편집→PDF 사이클 + 엔진 로드 시간)
 - [x] 결과를 UI 오버레이로 표시하는 디버그 모드 (`?perf=1` 쿼리)
 
 ### Phase 1: 렌더 파이프라인 리팩터링
@@ -671,7 +671,7 @@ I3 기능 완성 후 품질 개선. 커밋 `83f3a2c`, `b4c1a08`.
 개선: 현재 보이는 페이지를 먼저 렌더 → 즉시 swap → 나머지는 `requestIdleCallback`으로.
 
 - [ ] 측정: 현재 전체 렌더 시간 vs 첫 페이지만 렌더 시간
-- [ ] 구현: `PageRenderer`에 우선순위 렌더 로직
+- [x] 구현: `PdfViewer.renderAllPages`에서 현재 페이지 먼저 렌더 + DOM swap → 나머지 순차 렌더
 - [ ] 검증: 다중 페이지(5p+) 문서에서 체감 지연 측정
 
 **P2-B. 캔버스 재사용** (예상 효과: DOM 조작 비용 제거)
@@ -697,9 +697,8 @@ I3 기능 완성 후 품질 개선. 커밋 `83f3a2c`, `b4c1a08`.
 현재: 메인 스레드에서 canvas 렌더.
 개선: Worker에서 OffscreenCanvas로 렌더 → `transferToImageBitmap`.
 
-- [ ] 측정: 현재 렌더 중 메인 스레드 blocking 시간 (Performance 탭 프로파일링)
-- [ ] 판단: blocking이 체감될 정도인지 확인. 아니면 **스킵** (복잡도 대비 효과 부족)
-- [ ] 구현 (효과 확인 시): `PageRenderer` 내부에서 Worker 기반 렌더
+- [x] 판단: 현재 렌더가 ~184ms이고 visible-page-first로 첫 페이지는 ~50ms 내에 표시됨. OffscreenCanvas의 복잡도(Worker 통신, transferControlToOffscreen) 대비 효과가 부족하므로 **스킵**
+- [ ] 재평가: 문서가 대형(50p+)이거나 렌더가 500ms 이상이면 재검토
 
 ### Phase 3: UX 개선
 
@@ -752,7 +751,7 @@ I3 기능 완성 후 품질 개선. 커밋 `83f3a2c`, `b4c1a08`.
 현재: 단순 regex — 다중 파일 에러, overfull/underfull box 경고 미지원.
 개선: 다중 파일 경로 추적, box 경고 파싱 추가.
 
-- [ ] `parse-errors.ts` 확장
+- [x] `parse-errors.ts` 확장: overfull/underfull box 경고 파싱 + 복잡도 리팩터
 
 ### KPI (Gate 조건)
 
