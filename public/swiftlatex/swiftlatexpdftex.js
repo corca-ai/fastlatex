@@ -220,8 +220,8 @@ function writeTexmfCnf() {
 // CRITICAL: We must NOT use Emscripten's callMain because it calls exitJS()
 // which invokes exitRuntime(), setting runtimeExited=true. This flag is
 // JavaScript-side state that prepareExecutionContext() does NOT restore
-// (it only restores WASM heap memory). Subsequent _compileLaTeX() calls
-// then fail because the Emscripten runtime thinks it's already shut down.
+// (it only restores WASM heap memory). Subsequent calls then fail because
+// the Emscripten runtime thinks it's already shut down.
 //
 // Instead, we call _main() directly and catch ExitStatus ourselves — exactly
 // like the original base format build code on the main branch.
@@ -265,7 +265,6 @@ function runMain(programName, args) {
 self._preambleHash = "";
 self._preambleFmtData = null;
 self._fmtIsNative = false;    // true only when base format was built by our WASM binary
-self._mainCallSafe = true;    // false after first _compileLaTeX() — _main() can't be called after that
 
 // Split TeX source into preamble (before \begin{document}) and body (including it).
 function extractPreamble(texSource) {
@@ -502,10 +501,6 @@ function kpse_find_pk_impl(nameptr, dpi) {
 function compileLaTeXRoutine() {
     prepareExecutionContext();
 
-    // Set the main .tex entry point in the WASM engine
-    var setMainFunction = cwrap("setMainEntry", "number", ["string"]);
-    setMainFunction(self.mainfile);
-
     // kpathsea does lstat(argv[0]) to find the program directory.
     try { FS.writeFile(WORKROOT + "/pdflatex", ""); } catch(e) {}
 
@@ -536,8 +531,7 @@ function compileLaTeXRoutine() {
 
     // --- Preamble snapshot ---------------------------------------------------
     // Detect preamble changes and build a cached format to speed up body edits.
-    // Key: compilation ALWAYS goes through _compileLaTeX() (not _main()) —
-    // we only swap which format file gets loaded via the kpse cache.
+    // We swap which format file gets loaded via the kpse cache.
     var usedPreamble = false;
     var texSource = null;
     try { texSource = FS.readFile(WORKROOT + "/" + self.mainfile, { encoding: "utf8" }); }
@@ -550,10 +544,8 @@ function compileLaTeXRoutine() {
         if (hash === self._preambleHash && self._preambleFmtData) {
             // Preamble cache HIT — reuse cached preamble format
             usedPreamble = true;
-        } else if (self._mainCallSafe) {
+        } else {
             // Preamble cache MISS — build new preamble format.
-            // Only safe before the first _compileLaTeX() call. After that,
-            // _main() corrupts Emscripten JS-side state that _compileLaTeX() needs.
             var fmtBuildStart = performance.now();
             var fmt = buildPreambleFormat(split.preamble);
             var fmtBuildMs = Math.round(performance.now() - fmtBuildStart);
@@ -580,8 +572,8 @@ function compileLaTeXRoutine() {
     }
 
     // Write format to kpse cache — preamble format if available, else base format.
-    // _compileLaTeX() loads "swiftlatexpdftex.fmt" via kpathsea, so swapping the
-    // file in the cache transparently switches between full and preamble formats.
+    // runMain() uses "&pdflatex" to load pdflatex.fmt via kpathsea, so swapping
+    // the file in the cache transparently switches between full and preamble formats.
     var fmtToUse = usedPreamble ? self._preambleFmtData : self._fmtData;
     if (fmtToUse) {
         FS.writeFile(TEXCACHEROOT + "/swiftlatexpdftex.fmt", fmtToUse);
@@ -589,20 +581,20 @@ function compileLaTeXRoutine() {
         FS.writeFile(TEXCACHEROOT + "/pdflatex.fmt", fmtToUse);
         texlive200_cache["10/pdflatex.fmt"] = TEXCACHEROOT + "/pdflatex.fmt";
         // Also write to WORKROOT — open_fmt_file() tries fopen() in CWD first,
-        // before falling back to kpathsea. _compileLaTeX() passes "&pdflatex"
-        // so pdfTeX looks for pdflatex.fmt. Without this write, a stale base
+        // before falling back to kpathsea. "&pdflatex" in runMain() args tells
+        // pdfTeX to look for pdflatex.fmt. Without this write, a stale base
         // pdflatex.fmt left by buildPreambleFormat() would be loaded instead.
         FS.writeFile(WORKROOT + "/pdflatex.fmt", fmtToUse);
     }
 
-    // Re-set main entry right before compile (heap restores may have cleared it)
-    setMainFunction(self.mainfile);
-
-    // Compile — always use _compileLaTeX() for stability (never _main for compilation)
+    // Compile via runMain() — all compilation goes through the same _main() path,
+    // allowing preamble format rebuilds at any point in the session.
+    writeTexmfCnf();
     var compileStart = performance.now();
     var status;
     try {
-        status = _compileLaTeX();
+        status = runMain("pdflatex", ["-interaction=nonstopmode", "-synctex=1",
+                                       "&pdflatex", self.mainfile]);
     } catch(e) {
         if (e instanceof ExitStatus) {
             status = e.status;
@@ -611,9 +603,6 @@ function compileLaTeXRoutine() {
         }
     }
     var compileMs = Math.round(performance.now() - compileStart);
-    // After the first _compileLaTeX(), _main() can no longer be called safely.
-    // _compileLaTeX() leaves JS-side Emscripten state that breaks _main().
-    self._mainCallSafe = false;
 
     // Restore original main.tex after preamble compilation.
     // The preamble path replaces main.tex with a padded body (% comment lines +
@@ -650,9 +639,10 @@ function compileLaTeXRoutine() {
             texlive200_cache["10/pdflatex.fmt"] = TEXCACHEROOT + "/pdflatex.fmt";
         }
 
-        setMainFunction(self.mainfile);
+        writeTexmfCnf();
         try {
-            status = _compileLaTeX();
+            status = runMain("pdflatex", ["-interaction=nonstopmode", "-synctex=1",
+                                           "&pdflatex", self.mainfile]);
         } catch(e) {
             if (e instanceof ExitStatus) {
                 status = e.status;

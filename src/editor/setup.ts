@@ -52,12 +52,12 @@ export function setEditorContent(
   content: string,
   language = 'latex',
 ): void {
-  const model = editor.getModel()
-  if (model) {
-    model.dispose()
-  }
+  const oldModel = editor.getModel()
   const newModel = monaco.editor.createModel(content, language)
   editor.setModel(newModel)
+  if (oldModel) {
+    oldModel.dispose()
+  }
 }
 
 export function revealLine(editor: monaco.editor.IStandaloneCodeEditor, line: number): void {
