@@ -3,6 +3,7 @@ import { parseTexErrors } from './parse-errors'
 import type { TexEngine } from './tex-engine'
 
 const ENGINE_PATH = `${import.meta.env.BASE_URL}swiftlatex/swiftlatexpdftex.js`
+const FORMAT_PATH = `${import.meta.env.BASE_URL}swiftlatex/swiftlatexpdftex.fmt`
 
 export class SwiftLatexEngine implements TexEngine {
   private worker: Worker | null = null
@@ -50,6 +51,30 @@ export class SwiftLatexEngine implements TexEngine {
     // that nullifies the worker reference after posting the message
     const texliveUrl = this.texliveUrl ?? `${location.origin}${import.meta.env.BASE_URL}texlive/`
     this.worker!.postMessage({ cmd: 'settexliveurl', url: texliveUrl })
+
+    // Pre-load the format file so the worker doesn't need to build one.
+    // Without a texlive server (e.g. gh-pages), the worker can't fetch
+    // pdflatex.ini to build a format from scratch.
+    await this.preloadFormat()
+  }
+
+  private async preloadFormat(): Promise<void> {
+    try {
+      const resp = await fetch(FORMAT_PATH)
+      if (!resp.ok) return
+      const buf = await resp.arrayBuffer()
+      await new Promise<void>((resolve) => {
+        this.worker!.onmessage = (ev) => {
+          if (ev.data.cmd === 'loadformat') {
+            this.worker!.onmessage = () => {}
+            resolve()
+          }
+        }
+        this.worker!.postMessage({ cmd: 'loadformat', data: buf }, [buf])
+      })
+    } catch {
+      // Format not available — worker will try building one at compile time
+    }
   }
 
   writeFile(path: string, content: string | Uint8Array): void {

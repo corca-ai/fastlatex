@@ -677,6 +677,13 @@ self["onmessage"] = function(ev) {
         writeFileRoutine(data["url"], data["src"]);
     } else if (cmd === "setmainfile") {
         self.mainfile = data["url"];
+    } else if (cmd === "loadformat") {
+        // Pre-load a format file (.fmt) so the worker skips building one.
+        // The host can fetch the .fmt from a static URL and send it here.
+        var fmtData = new Uint8Array(data["data"]);
+        self._fmtData = fmtData;
+        console.log("[loadformat] Pre-loaded format: " + fmtData.length + " bytes");
+        self.postMessage({ "result": "ok", "cmd": "loadformat" });
     } else if (cmd === "grace") {
         console.error("Gracefully Close");
         self.close();
