@@ -1,4 +1,5 @@
 import type { VirtualFile } from '../types'
+import { deleteStoredFile, loadFiles, saveFile } from './persistent-fs'
 
 const DEFAULT_TEX = `\\documentclass[twocolumn]{article}
 \\usepackage{amsmath}
@@ -116,14 +117,34 @@ highlight the matching region in the PDF.
 export class VirtualFS {
   private files = new Map<string, VirtualFile>()
   private listeners: Array<() => void> = []
+  private saveTimers = new Map<string, ReturnType<typeof setTimeout>>()
+  private persistEnabled = false
 
   constructor() {
     this.writeFile('main.tex', DEFAULT_TEX)
   }
 
+  /** Load persisted files from IndexedDB. Call once at startup before first compile. */
+  async loadPersisted(): Promise<boolean> {
+    const stored = await loadFiles()
+    if (stored.length === 0) return false
+    for (const { path, content } of stored) {
+      this.files.set(path, { path, content, modified: true })
+    }
+    this.persistEnabled = true
+    this.notify()
+    return true
+  }
+
+  /** Enable automatic persistence to IndexedDB. */
+  enablePersistence(): void {
+    this.persistEnabled = true
+  }
+
   writeFile(path: string, content: string | Uint8Array): void {
     this.files.set(path, { path, content, modified: true })
     this.notify()
+    this.scheduleSave(path, content)
   }
 
   readFile(path: string): string | Uint8Array | null {
@@ -132,8 +153,24 @@ export class VirtualFS {
 
   deleteFile(path: string): boolean {
     const deleted = this.files.delete(path)
-    if (deleted) this.notify()
+    if (deleted) {
+      this.notify()
+      if (this.persistEnabled) deleteStoredFile(path)
+    }
     return deleted
+  }
+
+  private scheduleSave(path: string, content: string | Uint8Array): void {
+    if (!this.persistEnabled || typeof content !== 'string') return
+    const existing = this.saveTimers.get(path)
+    if (existing) clearTimeout(existing)
+    this.saveTimers.set(
+      path,
+      setTimeout(() => {
+        this.saveTimers.delete(path)
+        saveFile(path, content)
+      }, 500),
+    )
   }
 
   listFiles(): string[] {

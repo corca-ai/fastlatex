@@ -107,7 +107,7 @@ function onCompileResult(result: CompileResult): void {
 
 // --- Compile Scheduler ---
 const scheduler = new CompileScheduler(engine, onCompileResult, setStatus, {
-  minDebounceMs: 150,
+  minDebounceMs: 50,
   maxDebounceMs: 1000,
 })
 
@@ -231,6 +231,19 @@ async function init(): Promise<void> {
   setStatus('loading')
 
   try {
+    // Restore persisted files (if any) before engine init
+    const hadPersisted = await fs.loadPersisted()
+    if (hadPersisted) {
+      const content = fs.readFile('main.tex')
+      if (content && typeof content === 'string') {
+        setEditorContent(editor, content)
+        editor.onDidChangeModelContent(() => {
+          onEditorChange(editor.getValue())
+        })
+      }
+    }
+    fs.enablePersistence()
+
     await engine.init()
 
     setStatus('ready')
