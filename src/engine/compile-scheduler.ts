@@ -1,3 +1,4 @@
+import { perf } from '../perf/metrics'
 import type { CompileResult } from '../types'
 import type { TexEngine } from './tex-engine'
 
@@ -38,6 +39,8 @@ export class CompileScheduler {
 
     this.debounceTimer = setTimeout(() => {
       this.debounceTimer = null
+      perf.end('debounce')
+      perf.mark('compile')
       this.runCompile()
     }, this.debounceMs)
   }
@@ -80,6 +83,17 @@ export class CompileScheduler {
         this.pendingCompile = false
         this.runCompile()
       }
+    }
+  }
+
+  /** Immediately fire the pending debounce timer (skip remaining wait). */
+  flush(): void {
+    if (this.debounceTimer) {
+      clearTimeout(this.debounceTimer)
+      this.debounceTimer = null
+      perf.end('debounce')
+      perf.mark('compile')
+      this.runCompile()
     }
   }
 

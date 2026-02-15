@@ -3,6 +3,7 @@ import { createEditor, revealLine, setEditorContent } from './editor/setup'
 import { CompileScheduler } from './engine/compile-scheduler'
 import { SwiftLatexEngine } from './engine/swiftlatex-engine'
 import { VirtualFS } from './fs/virtual-fs'
+import { initPerfOverlay, perf } from './perf/metrics'
 import { SynctexParser } from './synctex/synctex-parser'
 import type { AppStatus, CompileResult } from './types'
 import { ErrorLog } from './ui/error-log'
@@ -58,6 +59,8 @@ const errorLog = new ErrorLog(errorLogContainer, (line) => {
 
 // --- Compile result handler ---
 function onCompileResult(result: CompileResult): void {
+  perf.end('compile')
+
   if (result.success && result.pdf) {
     // Update source content for text-mapper fallback
     for (const path of fs.listFiles()) {
@@ -69,12 +72,15 @@ function onCompileResult(result: CompileResult): void {
 
     // Parse SyncTeX data if available (preferred over text-mapper)
     if (result.synctex) {
+      perf.mark('synctex-parse')
       synctexParser
         .parse(result.synctex)
         .then((synctexData) => {
+          perf.end('synctex-parse')
           pdfViewer.setSynctexData(synctexData)
         })
         .catch((err) => {
+          perf.end('synctex-parse')
           console.warn('SyncTeX parse failed, using text-mapper fallback:', err)
           pdfViewer.setSynctexData(null)
         })
@@ -83,10 +89,14 @@ function onCompileResult(result: CompileResult): void {
     }
 
     setStatus('rendering')
+    perf.mark('render')
     pdfViewer.render(result.pdf).then(() => {
+      perf.end('render')
+      perf.end('total')
       setStatus('ready')
     })
   } else {
+    perf.end('total')
     setStatus(result.errors.length > 0 ? 'error' : 'ready')
   }
 
@@ -116,6 +126,8 @@ function syncAndCompile(): void {
 
 // --- Editor change handler ---
 function onEditorChange(content: string): void {
+  perf.mark('total')
+  perf.mark('debounce')
   fs.writeFile(currentFile, content)
   syncAndCompile()
 }
@@ -166,6 +178,9 @@ editor.onDidChangeCursorPosition(() => {
 
 // --- Layout ---
 setupDividers()
+
+// --- Perf overlay (activate with ?perf=1) ---
+initPerfOverlay()
 
 // --- Service Worker (texlive package cache) ---
 if ('serviceWorker' in navigator) {
