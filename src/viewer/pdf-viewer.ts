@@ -205,6 +205,12 @@ export class PdfViewer {
     renderedWrapper: HTMLElement,
   ): HTMLElement[] {
     const wrappers = new Array<HTMLElement>(numPages)
+    // Use the canvas's inline style for dimensions — offsetWidth/Height is 0
+    // when the wrapper isn't in the DOM yet, causing all placeholders to collapse
+    // and scroll position restoration to fail.
+    const canvas = renderedWrapper.querySelector('canvas')!
+    const pageWidth = canvas.style.width
+    const pageHeight = canvas.style.height
     for (let i = 1; i <= numPages; i++) {
       if (i === visiblePage) {
         wrappers[i - 1] = renderedWrapper
@@ -212,8 +218,8 @@ export class PdfViewer {
         const placeholder = document.createElement('div')
         placeholder.className = 'pdf-page-container'
         placeholder.dataset.pageNum = String(i)
-        placeholder.style.width = `${renderedWrapper.offsetWidth}px`
-        placeholder.style.height = `${renderedWrapper.offsetHeight}px`
+        placeholder.style.width = pageWidth
+        placeholder.style.height = pageHeight
         wrappers[i - 1] = placeholder
       }
     }
