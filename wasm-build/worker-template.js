@@ -29,6 +29,28 @@
 var TEXCACHEROOT = "/tex";  // Cache for downloaded TexLive packages
 var WORKROOT = "/work";     // Working directory for compilation
 
+// Semantic trace hooks: written to __strace.tex file, then \input'd right after
+// \begin{document} in the source. Runs after all \AtBeginDocument hooks, capturing
+// the FINAL definitions of \label/\ref/etc (post-hyperref and other packages).
+// Uses \makeatletter for @ in names; avoids _ (catcode 8 in standard LaTeX).
+var SEMANTIC_TRACE_TEX = [
+    "\\makeatletter",
+    "\\newwrite\\st@trace",
+    "\\immediate\\openout\\st@trace=\\jobname.trace\\relax",
+    "\\let\\st@orig@label\\label",
+    "\\renewcommand{\\label}[1]{\\immediate\\write\\st@trace{L:#1}\\st@orig@label{#1}}%",
+    "\\let\\st@orig@ref\\ref",
+    "\\renewcommand{\\ref}[1]{\\immediate\\write\\st@trace{R:#1}\\st@orig@ref{#1}}%",
+    "\\let\\st@orig@pageref\\pageref",
+    "\\renewcommand{\\pageref}[1]{\\immediate\\write\\st@trace{R:#1}\\st@orig@pageref{#1}}%",
+    "\\@ifundefined{eqref}{}{%",
+    "  \\let\\st@orig@eqref\\eqref",
+    "  \\renewcommand{\\eqref}[1]{\\immediate\\write\\st@trace{R:#1}\\st@orig@eqref{#1}}%",
+    "}%",
+    "\\makeatother",
+    ""
+].join("\n");
+
 // --- Worker state ------------------------------------------------------------
 
 self.memlog = "";                // Captured stdout/stderr from pdfTeX
@@ -588,6 +610,20 @@ function compileLaTeXRoutine() {
         FS.writeFile(WORKROOT + "/pdflatex.fmt", fmtToUse);
     }
 
+    // Semantic trace: write hook file and inject \input{__strace} after \begin{document}.
+    // Placed on the same line to avoid shifting line numbers (SyncTeX, error reports).
+    FS.writeFile(WORKROOT + "/__strace.tex", SEMANTIC_TRACE_TEX);
+    try {
+        var currentSrc = FS.readFile(WORKROOT + "/" + self.mainfile, { encoding: "utf8" });
+        var bdTag = "\\begin{document}";
+        var bdIdx = currentSrc.indexOf(bdTag);
+        if (bdIdx >= 0) {
+            var afterBD = bdIdx + bdTag.length;
+            var injected = currentSrc.slice(0, afterBD) + "\\input{__strace}" + currentSrc.slice(afterBD);
+            FS.writeFile(WORKROOT + "/" + self.mainfile, injected);
+        }
+    } catch(e) {}
+
     // Compile via runMain() — all compilation goes through the same _main() path,
     // allowing preamble format rebuilds at any point in the session.
     writeTexmfCnf();
@@ -608,13 +644,12 @@ function compileLaTeXRoutine() {
     }
     var compileMs = Math.round(performance.now() - compileStart);
 
-    // Restore original main.tex after preamble compilation.
-    // The preamble path replaces main.tex with a padded body (% comment lines +
-    // \begin{document}...). Without restoring, a recompile (e.g. "Rerun to get
-    // cross-references right") would see the padded body instead of the original
-    // source, causing extractPreamble() to fail and the base format to be used
-    // against the partial body — producing \normalsize errors.
-    if (usedPreamble && texSource) {
+    // Restore original main.tex after compilation.
+    // The preamble path replaces main.tex with a padded body, and the trace
+    // injection adds \input{__strace} after \begin{document}. Restore the
+    // original source so recompiles (e.g. "Rerun to get cross-references right")
+    // see the correct content and extractPreamble() works.
+    if (texSource) {
         FS.writeFile(WORKROOT + "/" + self.mainfile, texSource);
     }
 
@@ -694,6 +729,16 @@ function compileLaTeXRoutine() {
         try { FS.unlink(WORKROOT + "/" + baseName + ".fls"); } catch(e2) {}
     } catch(e) {}
 
+    // Read .trace (semantic trace output from \label/\ref hooks).
+    var semanticTrace = null;
+    try {
+        var traceData = FS.readFile(WORKROOT + "/" + baseName + ".trace", { encoding: "utf8" });
+        if (traceData && traceData.length > 0) {
+            semanticTrace = traceData;
+        }
+        try { FS.unlink(WORKROOT + "/" + baseName + ".trace"); } catch(e2) {}
+    } catch(e) {}
+
     // pdfTeX exit code 0 = success, 1 = completed with warnings/errors.
     // Both can produce valid PDF output, so try to read it for either.
     if (status === 0 || status === 1) {
@@ -713,7 +758,8 @@ function compileLaTeXRoutine() {
                 "log": self.memlog,
                 "cmd": "compile",
                 "engineCommands": engineCommands,
-                "inputFiles": inputFiles
+                "inputFiles": inputFiles,
+                "semanticTrace": semanticTrace
             });
             return;
         }
@@ -741,7 +787,8 @@ function compileLaTeXRoutine() {
             "cmd": "compile",
             "preambleSnapshot": usedPreamble,
             "engineCommands": engineCommands,
-            "inputFiles": inputFiles
+            "inputFiles": inputFiles,
+            "semanticTrace": semanticTrace
         };
 
         var transferables = [pdfArrayBuffer.buffer];
@@ -769,7 +816,8 @@ function compileLaTeXRoutine() {
             "cmd": "compile",
             "preambleSnapshot": false,
             "engineCommands": engineCommands,
-            "inputFiles": inputFiles
+            "inputFiles": inputFiles,
+            "semanticTrace": semanticTrace
         });
     }
 }

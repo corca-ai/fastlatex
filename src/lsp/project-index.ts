@@ -1,5 +1,6 @@
 import { parseAuxFile } from './aux-parser'
 import { parseLatexFile } from './latex-parser'
+import type { SemanticTrace } from './trace-parser'
 import type {
   AuxData,
   BibEntry,
@@ -77,6 +78,10 @@ export class ProjectIndex {
   private engineCommands = new Map<string, EngineCommandInfo>()
   private engineEnvironments = new Set<string>()
   private loadedPackages = new Map<string, string>()
+  private semanticTrace: SemanticTrace | null = null
+  private engineRefWarnings = new Set<string>()
+  private engineCiteWarnings = new Set<string>()
+  private engineDuplicateLabels = new Set<string>()
 
   updateFile(filePath: string, content: string): void {
     this.files.set(filePath, parseLatexFile(content, filePath))
@@ -203,11 +208,44 @@ export class ProjectIndex {
     return this.engineEnvironments
   }
 
+  updateSemanticTrace(trace: SemanticTrace): void {
+    this.semanticTrace = trace
+  }
+
+  getSemanticTrace(): SemanticTrace | null {
+    return this.semanticTrace
+  }
+
+  getEngineRefWarnings(): ReadonlySet<string> {
+    return this.engineRefWarnings
+  }
+
+  getEngineCiteWarnings(): ReadonlySet<string> {
+    return this.engineCiteWarnings
+  }
+
+  getEngineDuplicateLabels(): ReadonlySet<string> {
+    return this.engineDuplicateLabels
+  }
+
   updateLogData(log: string): void {
     this.loadedPackages = new Map()
     const re = /^Package:\s+(\S+)\s+\d{4}\/\d{2}\/\d{2}\s+(v?\S+)/gm
     for (const m of log.matchAll(re)) {
       this.loadedPackages.set(m[1]!, m[2]!)
+    }
+
+    this.engineRefWarnings = new Set()
+    this.engineCiteWarnings = new Set()
+    this.engineDuplicateLabels = new Set()
+    for (const m of log.matchAll(/Reference [`'](.+?)' on page \d+ undefined/g)) {
+      this.engineRefWarnings.add(m[1]!)
+    }
+    for (const m of log.matchAll(/Citation [`'](.+?)' on page \d+ undefined/g)) {
+      this.engineCiteWarnings.add(m[1]!)
+    }
+    for (const m of log.matchAll(/Label [`'](.+?)' multiply defined/g)) {
+      this.engineDuplicateLabels.add(m[1]!)
     }
   }
 

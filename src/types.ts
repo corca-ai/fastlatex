@@ -13,6 +13,8 @@ export interface CompileResult {
   engineCommands?: string[]
   /** Input .tex files discovered by pdfTeX -recorder (.fls) */
   inputFiles?: string[]
+  /** Raw .trace file content from semantic trace hooks */
+  semanticTrace?: string
 }
 
 export interface TexError {

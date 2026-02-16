@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { computeDiagnostics } from '../diagnostic-provider'
 import { ProjectIndex } from '../project-index'
+import { parseTraceFile } from '../trace-parser'
 
 describe('computeDiagnostics', () => {
   it('returns empty for clean project', () => {
@@ -137,5 +138,70 @@ describe('computeDiagnostics', () => {
     index.updateFile('chapter1.tex', '\\section{Chapter 1}')
     const diags = computeDiagnostics(index)
     expect(diags.filter((d) => d.code === 'missing-include')).toHaveLength(0)
+  })
+
+  // --- Semantic trace integration ---
+
+  it('suppresses undefined-ref when trace has the label', () => {
+    const index = new ProjectIndex()
+    index.updateFile('main.tex', '\\ref{macro-label}')
+    // No static \label{macro-label} anywhere → normally would be undefined-ref
+    index.updateSemanticTrace(parseTraceFile('L:macro-label'))
+    const diags = computeDiagnostics(index)
+    expect(diags.filter((d) => d.code === 'undefined-ref')).toHaveLength(0)
+  })
+
+  it('suppresses unreferenced-label when trace has the ref', () => {
+    const index = new ProjectIndex()
+    index.updateFile('main.tex', '\\label{lonely}')
+    // No static \ref{lonely} → normally would be unreferenced-label
+    index.updateSemanticTrace(parseTraceFile('R:lonely'))
+    const diags = computeDiagnostics(index)
+    expect(diags.filter((d) => d.code === 'unreferenced-label')).toHaveLength(0)
+  })
+
+  it('generates engine-only-label info diagnostic', () => {
+    const index = new ProjectIndex()
+    index.updateFile('main.tex', '\\section{Hello}')
+    // Trace has a label not in static parse or aux
+    index.updateSemanticTrace(parseTraceFile('L:generated-key'))
+    const diags = computeDiagnostics(index)
+    const eol = diags.filter((d) => d.code === 'engine-only-label')
+    expect(eol).toHaveLength(1)
+    expect(eol[0]!.severity).toBe('info')
+    expect(eol[0]!.message).toContain('generated-key')
+    expect(eol[0]!.message).toContain('macro expansion')
+  })
+
+  it('suppresses engine-only-label when label is referenced', () => {
+    const index = new ProjectIndex()
+    index.updateFile('main.tex', '\\ref{gen-key}')
+    index.updateSemanticTrace(parseTraceFile('L:gen-key'))
+    const diags = computeDiagnostics(index)
+    expect(diags.filter((d) => d.code === 'engine-only-label')).toHaveLength(0)
+  })
+
+  it('does not generate engine-only-label for statically known labels', () => {
+    const index = new ProjectIndex()
+    index.updateFile('main.tex', '\\label{known}')
+    index.updateSemanticTrace(parseTraceFile('L:known'))
+    const diags = computeDiagnostics(index)
+    expect(diags.filter((d) => d.code === 'engine-only-label')).toHaveLength(0)
+  })
+
+  it('does not generate engine-only-label for aux labels', () => {
+    const index = new ProjectIndex()
+    index.updateFile('main.tex', '\\section{Hi}')
+    index.updateAux('\\newlabel{aux-label}{{1}{1}}')
+    index.updateSemanticTrace(parseTraceFile('L:aux-label'))
+    const diags = computeDiagnostics(index)
+    expect(diags.filter((d) => d.code === 'engine-only-label')).toHaveLength(0)
+  })
+
+  it('no trace → no engine-only-label diagnostics', () => {
+    const index = new ProjectIndex()
+    index.updateFile('main.tex', '\\label{normal}')
+    const diags = computeDiagnostics(index)
+    expect(diags.filter((d) => d.code === 'engine-only-label')).toHaveLength(0)
   })
 })

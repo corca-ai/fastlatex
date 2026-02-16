@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ProjectIndex } from '../project-index'
+import type { SemanticTrace } from '../trace-parser'
 
 describe('ProjectIndex', () => {
   it('indexes a file and retrieves labels', () => {
@@ -262,5 +263,59 @@ describe('ProjectIndex', () => {
   it('starts with empty input files', () => {
     const index = new ProjectIndex()
     expect(index.getInputFiles()).toEqual([])
+  })
+
+  // --- Semantic trace ---
+
+  it('stores and retrieves semantic trace', () => {
+    const index = new ProjectIndex()
+    const trace: SemanticTrace = {
+      labels: new Set(['sec:intro', 'eq:1']),
+      refs: new Set(['sec:intro']),
+    }
+    index.updateSemanticTrace(trace)
+    const got = index.getSemanticTrace()
+    expect(got).not.toBeNull()
+    expect(got!.labels.has('sec:intro')).toBe(true)
+    expect(got!.labels.has('eq:1')).toBe(true)
+    expect(got!.refs.has('sec:intro')).toBe(true)
+  })
+
+  it('starts with null semantic trace', () => {
+    const index = new ProjectIndex()
+    expect(index.getSemanticTrace()).toBeNull()
+  })
+
+  // --- Log warning parsing ---
+
+  it('parses undefined reference warnings from log', () => {
+    const index = new ProjectIndex()
+    index.updateLogData(
+      "LaTeX Warning: Reference `foo' on page 1 undefined on input line 5.\n" +
+        "LaTeX Warning: Reference `bar' on page 2 undefined on input line 10.\n",
+    )
+    expect(index.getEngineRefWarnings().has('foo')).toBe(true)
+    expect(index.getEngineRefWarnings().has('bar')).toBe(true)
+    expect(index.getEngineRefWarnings().size).toBe(2)
+  })
+
+  it('parses undefined citation warnings from log', () => {
+    const index = new ProjectIndex()
+    index.updateLogData("LaTeX Warning: Citation `knuth84' on page 3 undefined on input line 20.\n")
+    expect(index.getEngineCiteWarnings().has('knuth84')).toBe(true)
+  })
+
+  it('parses duplicate label warnings from log', () => {
+    const index = new ProjectIndex()
+    index.updateLogData("LaTeX Warning: Label `sec:intro' multiply defined.\n")
+    expect(index.getEngineDuplicateLabels().has('sec:intro')).toBe(true)
+  })
+
+  it('clears previous warnings on updateLogData', () => {
+    const index = new ProjectIndex()
+    index.updateLogData("LaTeX Warning: Reference `foo' on page 1 undefined on input line 5.\n")
+    expect(index.getEngineRefWarnings().size).toBe(1)
+    index.updateLogData('This is pdfTeX, no warnings here.')
+    expect(index.getEngineRefWarnings().size).toBe(0)
   })
 })

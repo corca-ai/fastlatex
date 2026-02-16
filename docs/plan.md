@@ -101,13 +101,12 @@ I0에서 Tectonic(Rust, XeTeX 기반)과 SwiftLaTeX pdfTeX WASM을 비교 평가
 * 장기적으로 WebGPU 렌더러의 입력 데이터로 사용
 * 효과: PDF.js 파싱/렌더 단계를 우회하여 즉시 화면 반영
 
-#### (4) Semantic Trace — Phase 1-3 완료 (I5a 정적 LSP + I5b 해시 테이블 스캔 + 환경/분류/로그 + 인수 추출)
+#### (4) Semantic Trace — Phase 1-4 완료
 
 * **Phase 1 완료**: pdfTeX 해시 테이블 스캔 — 컴파일 후 WASM 힙에서 모든 정의된 제어 시퀀스 추출 → LSP Tier 3 자동완성
 * **Phase 2 완료**: eq_type 기반 명령어 분류 (macro/primitive/unknown), `endXXX→XXX` 환경 감지, 컴파일 로그에서 패키지 버전 파싱, hover 정보 추가
 * **Phase 3 완료**: 매크로 인수 개수 추출 (토큰 리스트 워킹, `\DeclareRobustCommand` 내부 매크로 병합) → 스니펫 자동완성 (`\frac{$1}{$2}`), hover에 인수 정보 표시
-* C 레벨 훅 또는 TeX 매크로 레벨 모두 가능
-* LSP의 "진실"을 정적 파서가 아닌 엔진 실행 트레이스로 구성
+* **Phase 4 완료**: TeX 매크로 훅으로 `\label`/`\ref` 추적 → `.trace` 파일 → LSP 진실 소스 승격. 매크로 생성 label false positive 제거.
 * 효과: Overleaf+일반 에디터 조합을 넘어서는 정확한 자동완성/진단
 
 ---
@@ -615,6 +614,7 @@ cp dist/swiftlatexpdftex.{js,wasm} ../public/swiftlatex/
 | 패키지 버전 파싱 | ✅ 컴파일 로그에서 추출 (I5b Phase 2) | 높음 |
 | 정적 진단 (undefined ref/cite, duplicate label) | ✅ 편집+컴파일 시 실행 (I6) | 높음 |
 | 패키지 에러/경고 파싱 | ✅ `Package xxx Error/Warning` (I6) | 높음 |
+| 엔진 트레이스 기반 진단 (매크로 label/ref) | ✅ `.trace` 파일 기반 (I5b-4) | 높음 |
 
 ---
 
@@ -862,24 +862,121 @@ WASM 재빌드 후 확인 (CI run 22049940861):
 
 ---
 
+## Iteration 6b — 멀티파일 프로젝트 지원 ✅
+
+**사용자 가치:** `\input{chapter}` 멀티파일 프로젝트에서 SyncTeX, 에러 네비게이션, LSP 진단이 모든 파일에 걸쳐 정확히 동작
+
+<details><summary>A. 엔진 기반 파일 검색 + LSP 통합</summary>
+
+- [x] pdfTeX `-recorder` 플래그 활성화 → `.fls` 파싱으로 입력 파일 자동 검색
+- [x] `inputFiles`를 Worker → Engine → `CompileResult`로 전달
+- [x] `ProjectIndex`: `inputFiles`의 `.tex` 파일 자동 인덱싱
+- [x] `aux-parser.ts`: `\@input{}` 파싱 → 하위 `.aux` 라벨/citation 병합
+- [x] 새 진단 추가: unreferenced-label (info), missing-include (warning)
+- [x] `setFile()` 시 즉시 크로스파일 인덱싱
+- [x] `updateAuxData()` — 사전 파싱된 aux 데이터 수용 (이중 파싱 방지)
+
+</details>
+
+<details><summary>B. Model-per-file 에디터 + 멀티파일 SyncTeX</summary>
+
+- [x] Model-per-file 패턴: 프로젝트 파일마다 Monaco `ITextModel` 하나씩 유지, `editor.setModel()`로 전환
+  - 기존: 파일 전환마다 model create/dispose → 크로스파일 진단 불가
+  - 변경: model 상시 유지 → 파일 안 열어도 진단 마커 동작
+- [x] SyncTeX 파서: 컨텐츠 섹션 중간의 `Input` 항목 처리
+  - pdfTeX가 `\input{file}` 시 런타임에 Input 라인 추가 — 기존 파서는 프리앰블만 읽음
+  - 수정 후 포함 파일의 forward/inverse search 모두 정상
+- [x] `switchingModel` 가드: `editor.setModel()` 중 spurious cursor 이벤트 + Monaco Delayer "Canceled" 에러 방지
+- [x] SyncTeX 입력 경로 정규화: `/work/` 접두사 처리 (기존 `/work/./`만)
+- [x] 기본 예제를 4파일 구성으로 변경 (main.tex + algebra.tex + analysis.tex + linalg.tex)
+
+</details>
+
+<details><summary>C. 멀티파일 에러 로그 + 크로스파일 네비게이션</summary>
+
+- [x] `parse-errors.ts`: pdfTeX 로그의 괄호 기반 파일 스택 파싱 (`(file ... )`) → 각 `TexError`에 `file` 필드 설정
+- [x] `error-log.ts`: `file:line:` 접두사 표시, 클릭 시 해당 파일로 전환 후 라인 점프
+- [x] `error-markers.ts`: 에러를 파일 경로별로 올바른 Monaco model에 라우팅
+- [x] LSP 진단 (unreferenced label 등)을 에러 로그에 병합
+- [x] 기본 예제에 크로스 레퍼런스 추가 (unreferenced-label 경고 제거)
+
+</details>
+
+<details><summary>D. 테스트</summary>
+
+- [x] SyncTeX 파서 테스트: 멀티파일 Input 파싱 (3개 추가)
+- [x] 에러 파서 테스트: 파일 스택 추적, 멀티파일 에러, 중첩 괄호 (7개 추가)
+- [x] aux-parser 테스트: `\@input` 파싱 (3개 추가)
+- [x] 진단 테스트: unreferenced label, missing include (4개 추가)
+- [x] project-index 테스트: 멀티파일 인덱싱 (3개 추가)
+
+</details>
+
+---
+
+## Iteration 5b Phase 4 — Semantic Trace (엔진 트레이스 → LSP 진실 소스) ✅
+
+**사용자 가치:** 매크로가 생성한 `\label`/`\ref`도 정확히 추적 — `\newcommand{\mklabel}[1]{\label{#1}}` 사용 시 false positive 진단 제거. 엔진이 LSP "진실 소스"로 승격.
+
+**접근법:** WASM 재빌드 없이 TeX 매크로 훅으로 구현. 컴파일 시 `\begin{document}` 직후에 `\input{__strace}` 주입 → `\label`/`\ref`/`\pageref`/`\eqref` 호출을 `.trace` 파일에 기록. `\AtBeginDocument` 훅 이후 실행되므로 hyperref 등 패키지 재정의를 정확히 캡처.
+
+<details><summary>A. Worker: 트레이스 훅 주입 + 읽기</summary>
+
+- [x] `SEMANTIC_TRACE_TEX` 상수: `\makeatletter` + `\newwrite\st@trace` + `\renewcommand` 훅 (`@` 이름 사용, `_` catcode 문제 회피)
+- [x] `compileLaTeXRoutine()`: `\begin{document}` 뒤에 `\input{__strace}` 주입 (같은 줄 — 라인 번호 불변)
+- [x] 컴파일 후 `.trace` 파일 읽기 → `semanticTrace` 필드로 응답
+- [x] 컴파일 후 원본 소스 항상 복원 (preamble/non-preamble 경로 모두)
+- [x] `worker-template.js` + `swiftlatexpdftex.js` 동일 변경
+
+</details>
+
+<details><summary>B. TypeScript: 트레이스 파서 + 통합</summary>
+
+- [x] `src/lsp/trace-parser.ts`: `parseTraceFile()` — `L:key`/`R:key` 파싱 → `SemanticTrace { labels, refs }`
+- [x] `src/types.ts`: `CompileResult.semanticTrace?: string`
+- [x] `src/engine/swiftlatex-engine.ts`: `WorkerMessage.semanticTrace` + `compile()` 전달
+- [x] `src/lsp/project-index.ts`: `updateSemanticTrace()` / `getSemanticTrace()` + 엔진 로그 경고 파싱 (ref/cite undefined, duplicate label)
+- [x] `src/latex-editor.ts`: `updateEngineMetadata()`에서 trace 업데이트 (null이면 빈 trace로 클리어)
+
+</details>
+
+<details><summary>C. 진단 업그레이드</summary>
+
+- [x] `findUndefinedRefs`: trace labels도 "정의됨"으로 인정 → 매크로 생성 label false positive 제거
+- [x] `findUnreferencedLabels`: trace refs도 "참조됨"으로 인정
+- [x] `findEngineOnlyLabels`: 엔진에만 보이고 참조되지 않은 label에 info 진단 (참조된 것은 억제)
+- [x] `latex-parser.ts`: `#` 포함 label 이름 무시 (`\newcommand` 본문의 `\label{#1}` false positive 제거)
+
+</details>
+
+<details><summary>D. 테스트</summary>
+
+- [x] `trace-parser.test.ts`: 5 tests (파싱, 빈 입력, 미지 접두사, 중복, 특수문자)
+- [x] `diagnostic-provider.test.ts`: 7 tests 추가 (trace 기반 억제, engine-only-label 생성/조건)
+- [x] `project-index.test.ts`: 6 tests 추가 (semantic trace CRUD, 로그 경고 파싱)
+
+</details>
+
+### 설계 결정
+
+| 결정 | 이유 |
+|------|------|
+| Format 주입 대신 소스 주입 | `_fmtIsNative` false 시 format 경로 스킵 → 소스 주입이 모든 경로에서 동작 |
+| `\makeatletter` + `@` 이름 | `_`는 catcode 8 (subscript) → 제어 시퀀스 이름 불가. `@`는 `\makeatletter`로 활성화 |
+| `\begin{document}` 뒤 주입 | `\AtBeginDocument` 훅 이후 실행 → hyperref 등 패키지 재정의 후 최종 정의 캡처 |
+| `\cite` 미포함 | `.aux`의 `\citation{key}`이 이미 cite 추적. optional arg 처리 복잡. |
+
+---
+
 # Part III. 로드맵 (미구현)
 
 ## ~~Iteration 5b Phase 3 — Semantic Trace (매크로 인수 추출)~~ → ✅ 완료
 
 매크로 인수 개수 추출 + 스니펫 자동완성 + hover 인수 정보. 상세는 Part II 참조.
 
-## Iteration 5b Phase 4 — Semantic Trace (매크로 확장 트레이스)
+## ~~Iteration 5b Phase 4 — Semantic Trace (엔진 트레이스 → LSP 진실 소스)~~ → ✅ 완료
 
-**사용자 가치:** "매크로 확장도 추적, 엔진 기반 정밀 진단"
-
-**선행 완료:** Phase 1-3 (해시 테이블 스캔 + 환경 감지 + 명령어 분류 + 인수 추출 + 스니펫).
-나머지는 pdfTeX C 코드에 semantic trace 훅을 추가하여 매크로 확장을 실시간 추적:
-
-* 매크로 확장 시점에 구조화 이벤트 emit (label, ref, cite, section, include, newcommand)
-* 정적 파서가 아닌 엔진 실행 트레이스 기반 → LaTeX 특유의 매크로 확장도 정확하게 추적
-* WASM 빌드 파이프라인(`wasm-build/`) 활용
-
-**KPI:** 매크로 확장 결과 기반 진단, 엔진 트레이스가 LSP "진실 소스"로 승격
+엔진 트레이스 기반 정밀 진단. 상세는 Part II 참조.
 
 ---
 
@@ -977,13 +1074,15 @@ pdfTeX `ship_out()`에 PDL 출력 드라이버 추가. WebGPU로 PDL 렌더.
 | I5c(번들) | 정적 번들 최적화 (hyph 제거, pdftex.map gzip preload, onmessage 리팩터) | ✅ |
 | I5c-d | Go-to-definition 강화 (`\cite`→`\bibitem`) + 계층적 outline | ✅ |
 | I6 | 정적 진단 (undefined ref/cite, duplicate label) + 로그 파서 강화 | ✅ |
+| I6b | 멀티파일 프로젝트 (model-per-file, 멀티파일 SyncTeX, 크로스파일 에러/진단) | ✅ |
+| I5b-4 | Semantic Trace Phase 4 (엔진 트레이스 → LSP 진실 소스, 매크로 label/ref 추적) | ✅ |
 
 ## 코드베이스 현황
 
 | 지표 | 수치 |
 |------|------|
-| TypeScript 소스 | 36 파일, ~6,200줄 (프로덕션) |
-| 단위 테스트 | 12 파일, 211 tests |
+| TypeScript 소스 | 36 파일, ~6,600줄 (프로덕션) |
+| 단위 테스트 | 13 파일, 249 tests |
 | E2E 테스트 | 8 스펙, ~1,070줄 |
 | WASM 빌드 | 7 파일 (Dockerfile, Makefile, build.sh, worker-template.js, wasm-entry.c, kpse-hook.c, trace-hook.c) |
 | 런타임 의존성 | 2개 (monaco-editor, pdfjs-dist) |
@@ -1000,13 +1099,9 @@ pdfTeX `ship_out()`에 PDL 출력 드라이버 추가. WebGPU로 PDL 렌더.
 
 ### ~~Option B-3: Semantic Trace Phase 3 (매크로 인수 추출)~~ → ✅ 완료
 
-### Option B-4: Semantic Trace Phase 4 (매크로 확장 트레이스)
+### ~~Option B-4: Semantic Trace Phase 4 (매크로 확장 트레이스)~~ → ✅ 완료
 
-해시 테이블 스캔 + 환경 감지 + 명령어 분류 + 인수 추출로 패키지 명령어/환경은 커버됨. 남은 부분:
-
-1. pdfTeX C 코드에 매크로 확장 시점 훅 (label, ref, cite, section, include 이벤트)
-2. 매크로 확장 결과 기반 정확한 진단
-3. 엔진 트레이스 → LSP "진실 소스" 승격
+TeX 매크로 훅 주입으로 `\label`/`\ref` 추적 + 진단 연동 완료. C 훅은 후속 정밀도 개선 시 추가 가능.
 
 ### Option C: PDL + LiveView (I7, 대형)
 

@@ -7,6 +7,7 @@ import { parseAuxFile } from './lsp/aux-parser'
 import { computeDiagnostics } from './lsp/diagnostic-provider'
 import { ProjectIndex } from './lsp/project-index'
 import { registerLatexProviders } from './lsp/register-providers'
+import { parseTraceFile } from './lsp/trace-parser'
 import { initPerfOverlay, perf } from './perf/metrics'
 import { SynctexParser } from './synctex/synctex-parser'
 import type {
@@ -517,6 +518,11 @@ export class LatexEditor {
     }
     if (result.log) {
       this.projectIndex.updateLogData(result.log)
+    }
+    if (result.semanticTrace) {
+      this.projectIndex.updateSemanticTrace(parseTraceFile(result.semanticTrace))
+    } else {
+      this.projectIndex.updateSemanticTrace({ labels: new Set(), refs: new Set() })
     }
     if (result.inputFiles?.length) {
       this.projectIndex.updateInputFiles(result.inputFiles)

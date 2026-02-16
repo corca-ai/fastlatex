@@ -18,17 +18,20 @@ export function computeDiagnostics(index: ProjectIndex): Diagnostic[] {
   findDuplicateLabels(index, diagnostics)
   findUnreferencedLabels(index, diagnostics)
   findMissingIncludes(index, diagnostics)
+  findEngineOnlyLabels(index, diagnostics)
   return diagnostics
 }
 
 function findUndefinedRefs(index: ProjectIndex, out: Diagnostic[]): void {
   const definedLabels = new Set(index.getAllLabels().map((l) => l.name))
   const auxLabels = index.getAuxLabels()
+  const trace = index.getSemanticTrace()
 
   for (const file of index.getFiles()) {
     const symbols = index.getFileSymbols(file)
     if (!symbols) continue
     for (const ref of symbols.labelRefs) {
+      if (trace?.labels.has(ref.name)) continue // macro-generated label → no false positive
       if (!definedLabels.has(ref.name) && !auxLabels.has(ref.name)) {
         out.push({
           file,
@@ -104,6 +107,10 @@ function findUnreferencedLabels(index: ProjectIndex, out: Diagnostic[]): void {
     if (!symbols) continue
     for (const ref of symbols.labelRefs) refdNames.add(ref.name)
   }
+  const trace = index.getSemanticTrace()
+  if (trace) {
+    for (const ref of trace.refs) refdNames.add(ref)
+  }
   for (const label of index.getAllLabels()) {
     if (!refdNames.has(label.name)) {
       out.push({
@@ -137,5 +144,31 @@ function findMissingIncludes(index: ProjectIndex, out: Diagnostic[]): void {
         })
       }
     }
+  }
+}
+
+function findEngineOnlyLabels(index: ProjectIndex, out: Diagnostic[]): void {
+  const trace = index.getSemanticTrace()
+  if (!trace) return
+  const staticLabels = new Set(index.getAllLabels().map((l) => l.name))
+  // Collect all static refs to skip referenced engine-only labels
+  const staticRefs = new Set<string>()
+  for (const file of index.getFiles()) {
+    const symbols = index.getFileSymbols(file)
+    if (!symbols) continue
+    for (const ref of symbols.labelRefs) staticRefs.add(ref.name)
+  }
+  for (const key of trace.labels) {
+    if (staticLabels.has(key) || index.getAuxLabels().has(key)) continue
+    if (staticRefs.has(key) || trace.refs.has(key)) continue // referenced → not a problem
+    out.push({
+      file: '?',
+      line: 0,
+      column: 0,
+      endColumn: 0,
+      message: `Label '${key}' defined by macro expansion (not visible in source)`,
+      severity: 'info',
+      code: 'engine-only-label',
+    })
   }
 }

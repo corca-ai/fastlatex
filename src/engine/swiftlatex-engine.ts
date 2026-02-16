@@ -25,6 +25,7 @@ interface WorkerMessage {
   preambleSnapshot?: boolean
   engineCommands?: string[]
   inputFiles?: string[]
+  semanticTrace?: string
   [key: string]: unknown
 }
 
@@ -260,6 +261,9 @@ export class SwiftLatexEngine implements TexEngine {
     }
     if (data.inputFiles) {
       result.inputFiles = data.inputFiles
+    }
+    if (data.semanticTrace) {
+      result.semanticTrace = data.semanticTrace as string
     }
     return result
   }

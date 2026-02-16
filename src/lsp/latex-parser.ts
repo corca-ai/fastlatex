@@ -56,7 +56,7 @@ function extractLabels(
 ): void {
   for (const m of line.matchAll(LABEL_RE)) {
     const name = extractBraceContent(line, m.index + m[0].length - 1)
-    if (name) {
+    if (name && !name.includes('#')) {
       symbols.labels.push({ name, location: loc(filePath, lineNum, m.index + 1) })
     }
   }
