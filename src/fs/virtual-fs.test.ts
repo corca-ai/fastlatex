@@ -43,13 +43,20 @@ describe('VirtualFS', () => {
     fs.writeFile('b.tex', '')
     fs.writeFile('a.tex', '')
     const files = fs.listFiles()
-    expect(files).toEqual(['a.tex', 'b.tex', 'main.tex'])
+    expect(files).toEqual([
+      'a.tex',
+      'algebra.tex',
+      'analysis.tex',
+      'b.tex',
+      'linalg.tex',
+      'main.tex',
+    ])
   })
 
   it('tracks modified files', () => {
     const fs = new VirtualFS()
-    // main.tex starts modified
-    expect(fs.getModifiedFiles()).toHaveLength(1)
+    // default files start modified (main.tex + 3 chapter files)
+    expect(fs.getModifiedFiles()).toHaveLength(4)
 
     fs.markSynced()
     expect(fs.getModifiedFiles()).toHaveLength(0)

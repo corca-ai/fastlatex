@@ -28,16 +28,21 @@ function ensureMonacoConfigured(): void {
   monaco.languages.setLanguageConfiguration('latex', latexLanguageConfig)
 }
 
+/** Create a Monaco text model for a project file. */
+export function createFileModel(content: string, filePath: string): monaco.editor.ITextModel {
+  ensureMonacoConfigured()
+  const lang = filePath.endsWith('.tex') ? 'latex' : 'plaintext'
+  const uri = monaco.Uri.file(filePath)
+  return monaco.editor.createModel(content, lang, uri)
+}
+
+/** Create the Monaco editor instance with an existing model. */
 export function createEditor(
   container: HTMLElement,
-  initialContent: string,
-  onChange: (content: string) => void,
-  filePath?: string,
+  model: monaco.editor.ITextModel,
 ): monaco.editor.IStandaloneCodeEditor {
   ensureMonacoConfigured()
-  const uri = filePath ? monaco.Uri.file(filePath) : undefined
-  const model = monaco.editor.createModel(initialContent, 'latex', uri)
-  const editor = monaco.editor.create(container, {
+  return monaco.editor.create(container, {
     model,
     theme: 'vs-dark',
     fontSize: 14,
@@ -49,34 +54,6 @@ export function createEditor(
     renderWhitespace: 'none',
     tabSize: 2,
   })
-
-  editor.onDidChangeModelContent(() => {
-    onChange(editor.getValue())
-  })
-
-  return editor
-}
-
-export function setEditorContent(
-  editor: monaco.editor.IStandaloneCodeEditor,
-  content: string,
-  language = 'latex',
-  filePath?: string,
-): void {
-  const oldModel = editor.getModel()
-  const uri = filePath ? monaco.Uri.file(filePath) : undefined
-  // Reuse existing model for this URI if it exists, otherwise create new
-  const existing = uri ? monaco.editor.getModel(uri) : null
-  if (existing) {
-    existing.setValue(content)
-    editor.setModel(existing)
-  } else {
-    const newModel = monaco.editor.createModel(content, language, uri)
-    editor.setModel(newModel)
-  }
-  if (oldModel && oldModel !== editor.getModel()) {
-    oldModel.dispose()
-  }
 }
 
 export function revealLine(editor: monaco.editor.IStandaloneCodeEditor, line: number): void {

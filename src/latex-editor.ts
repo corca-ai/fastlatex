@@ -1,5 +1,5 @@
 import type * as Monaco from 'monaco-editor'
-import { createEditor, revealLine, setEditorContent } from './editor/setup'
+import { createEditor, createFileModel, revealLine } from './editor/setup'
 import { CompileScheduler } from './engine/compile-scheduler'
 import { SwiftLatexEngine } from './engine/swiftlatex-engine'
 import { VirtualFS } from './fs/virtual-fs'
@@ -39,12 +39,17 @@ export class LatexEditor {
   private projectIndex = new ProjectIndex()
   private lspDisposables: { dispose(): void }[] = []
 
+  // --- Models (one per project file, kept alive for cross-file diagnostics) ---
+  private models = new Map<string, Monaco.editor.ITextModel>()
+
   // --- State ---
   private currentFile: string
   private pendingRecompile = false
   private editorChangeDisposable: { dispose(): void } | null = null
   private forwardSearchTimer: ReturnType<typeof setTimeout> | null = null
   private lastForwardLine = -1
+  private lastForwardFile = ''
+  private switchingModel = false
   private disposed = false
 
   // --- Events ---
@@ -109,31 +114,42 @@ export class LatexEditor {
   // --- File management ---
 
   loadProject(files: Record<string, string | Uint8Array>): void {
+    const oldPaths = new Set(this.models.keys())
+    const newPaths = new Set(Object.keys(files))
+
     // Clear existing files and index
     for (const path of this.fs.listFiles()) {
       this.fs.deleteFile(path)
       this.projectIndex.removeFile(path)
     }
-    // Load new files
+    // Load new files, reuse or create models
     for (const [path, content] of Object.entries(files)) {
       this.fs.writeFile(path, content)
       if (typeof content === 'string') {
         this.projectIndex.updateFile(path, content)
+        const existing = this.models.get(path)
+        if (existing) {
+          existing.setValue(content)
+        } else {
+          this.ensureModel(path, content)
+        }
+      }
+    }
+    // Dispose models for removed files
+    for (const path of oldPaths) {
+      if (!newPaths.has(path)) {
+        this.disposeModel(path)
       }
     }
     // Switch editor to main file
     this.currentFile = this.mainFile
-    const file = this.fs.getFile(this.currentFile)
-    if (file && this.editor) {
-      const content =
-        typeof file.content === 'string' ? file.content : new TextDecoder().decode(file.content)
-      setEditorContent(
-        this.editor,
-        content,
-        this.currentFile.endsWith('.tex') ? 'latex' : 'plaintext',
-        this.currentFile,
-      )
-      this.reattachEditorChangeHandler()
+    this.lastForwardLine = -1
+    this.lastForwardFile = ''
+    const model = this.models.get(this.currentFile)
+    if (model && this.editor) {
+      this.switchingModel = true
+      this.editor.setModel(model)
+      this.switchingModel = false
     }
     // Sync and compile
     this.syncAndCompile()
@@ -154,13 +170,16 @@ export class LatexEditor {
 
   setFile(path: string, content: string | Uint8Array): void {
     this.fs.writeFile(path, content)
-    if (typeof content === 'string' && path.endsWith('.tex')) {
-      this.projectIndex.updateFile(path, content)
-    }
-    if (path === this.currentFile && this.editor) {
-      const text = typeof content === 'string' ? content : new TextDecoder().decode(content)
-      setEditorContent(this.editor, text, path.endsWith('.tex') ? 'latex' : 'plaintext')
-      this.reattachEditorChangeHandler()
+    if (typeof content === 'string') {
+      if (path.endsWith('.tex')) {
+        this.projectIndex.updateFile(path, content)
+      }
+      const model = this.models.get(path)
+      if (model) {
+        model.setValue(content)
+      } else {
+        this.ensureModel(path, content)
+      }
     }
     this.emit('filechange', { path, content })
   }
@@ -170,6 +189,8 @@ export class LatexEditor {
   }
 
   deleteFile(path: string): boolean {
+    this.disposeModel(path)
+    this.projectIndex.removeFile(path)
     return this.fs.deleteFile(path)
   }
 
@@ -227,9 +248,32 @@ export class LatexEditor {
     this.lspDisposables = []
     this.editorChangeDisposable?.dispose()
     this.editor?.dispose()
+    for (const model of this.models.values()) model.dispose()
+    this.models.clear()
     this.engine.terminate()
     this.listeners.clear()
     this.root.remove()
+  }
+
+  // ------------------------------------------------------------------
+  // Private: Model management
+  // ------------------------------------------------------------------
+
+  private ensureModel(path: string, content: string): Monaco.editor.ITextModel {
+    let model = this.models.get(path)
+    if (!model) {
+      model = createFileModel(content, path)
+      this.models.set(path, model)
+    }
+    return model
+  }
+
+  private disposeModel(path: string): void {
+    const model = this.models.get(path)
+    if (model) {
+      model.dispose()
+      this.models.delete(path)
+    }
   }
 
   // ------------------------------------------------------------------
@@ -269,12 +313,19 @@ export class LatexEditor {
     const viewerContainer = this.root.querySelector<HTMLElement>('.le-viewer')!
     this.pdfViewer = new PdfViewer(viewerContainer)
 
-    // Inverse search
+    // Inverse search (PDF click → source)
     this.pdfViewer.setInverseSearchHandler((loc) => {
-      if (loc.file !== this.currentFile) {
+      const needSwitch = loc.file !== this.currentFile
+      if (needSwitch) {
         this.onFileSelect(loc.file)
       }
-      revealLine(this.editor, loc.line)
+      // Defer revealLine so Monaco settles after model switch
+      // (setModel disposes internal Delayers that reject pending promises)
+      if (needSwitch) {
+        requestAnimationFrame(() => revealLine(this.editor, loc.line))
+      } else {
+        revealLine(this.editor, loc.line)
+      }
     })
 
     // Error Log
@@ -291,15 +342,28 @@ export class LatexEditor {
       { minDebounceMs: 50, maxDebounceMs: 1000 },
     )
 
-    // Editor
+    // Create models for all text files and index them
+    for (const path of this.fs.listFiles()) {
+      const file = this.fs.getFile(path)
+      if (file && typeof file.content === 'string') {
+        this.ensureModel(path, file.content)
+        this.projectIndex.updateFile(path, file.content)
+      }
+    }
+
+    // Ensure current file has a model (even if empty)
+    if (!this.models.has(this.currentFile)) {
+      this.ensureModel(this.currentFile, '')
+    }
+
+    // Editor (uses pre-created model)
     const editorContainer = this.root.querySelector<HTMLElement>('.le-editor')!
-    const initialContent = (this.fs.readFile(this.currentFile) as string) ?? ''
-    this.editor = createEditor(
-      editorContainer,
-      initialContent,
-      (content) => this.onEditorChange(content),
-      this.currentFile,
-    )
+    this.editor = createEditor(editorContainer, this.models.get(this.currentFile)!)
+
+    // Single change handler — works across all model switches
+    this.editorChangeDisposable = this.editor.onDidChangeModelContent(() => {
+      this.onEditorChange(this.editor.getValue())
+    })
 
     // File Tree
     const fileTreeContainer = this.root.querySelector<HTMLElement>('.le-file-tree')!
@@ -307,9 +371,12 @@ export class LatexEditor {
 
     // Forward search (auto on cursor move, debounced)
     this.editor.onDidChangeCursorPosition(() => {
+      if (this.switchingModel) return
       const line = this.editor.getPosition()?.lineNumber
-      if (!line || line === this.lastForwardLine) return
+      if (!line || (line === this.lastForwardLine && this.currentFile === this.lastForwardFile))
+        return
       this.lastForwardLine = line
+      this.lastForwardFile = this.currentFile
       if (this.forwardSearchTimer) clearTimeout(this.forwardSearchTimer)
       this.forwardSearchTimer = setTimeout(() => {
         this.pdfViewer.forwardSearch(this.currentFile, line)
@@ -339,19 +406,16 @@ export class LatexEditor {
     // Register LSP providers
     this.lspDisposables = registerLatexProviders(this.projectIndex, this.fs)
 
-    // Index initial files
-    for (const path of this.fs.listFiles()) {
-      const file = this.fs.getFile(path)
-      if (file && typeof file.content === 'string') {
-        this.projectIndex.updateFile(path, file.content)
-      }
-    }
-
     // Layout dividers
     setupDividers(this.root)
 
     // Perf overlay (activate with ?perf=1)
     initPerfOverlay()
+
+    // Suppress Monaco's internal "Canceled" promise rejections on model switch
+    window.addEventListener('unhandledrejection', (e) => {
+      if (e.reason?.message === 'Canceled') e.preventDefault()
+    })
 
     // Service Worker
     if (this.opts.serviceWorker !== false && 'serviceWorker' in navigator) {
@@ -414,21 +478,25 @@ export class LatexEditor {
     }
 
     this.currentFile = path
+    this.lastForwardLine = -1
+    this.lastForwardFile = ''
+
+    // Ensure model exists (file may have been added externally)
     const file = this.fs.getFile(path)
-    if (file && this.editor) {
-      const content =
-        typeof file.content === 'string' ? file.content : new TextDecoder().decode(file.content)
-      setEditorContent(this.editor, content, path.endsWith('.tex') ? 'latex' : 'plaintext', path)
-      this.reattachEditorChangeHandler()
+    if (file && typeof file.content === 'string' && !this.models.has(path)) {
+      this.ensureModel(path, file.content)
+    }
+
+    const model = this.models.get(path)
+    if (model && this.editor) {
+      // Suppress cursor-change events during model switch to avoid
+      // spurious forward searches and Monaco Delayer "Canceled" rejections
+      this.switchingModel = true
+      this.editor.setModel(model)
+      this.switchingModel = false
     }
     this.fileTree.setActive(path)
-  }
-
-  private reattachEditorChangeHandler(): void {
-    if (this.editorChangeDisposable) this.editorChangeDisposable.dispose()
-    this.editorChangeDisposable = this.editor.onDidChangeModelContent(() => {
-      this.onEditorChange(this.editor.getValue())
-    })
+    this.runDiagnostics()
   }
 
   private updateEngineMetadata(result: CompileResult): void {
@@ -445,6 +513,7 @@ export class LatexEditor {
           const file = this.fs.getFile(path)
           if (file && typeof file.content === 'string') {
             this.projectIndex.updateFile(path, file.content)
+            this.ensureModel(path, file.content)
           }
         }
       }

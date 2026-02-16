@@ -33,7 +33,7 @@ const DIAG_SEVERITY: Record<Diagnostic['severity'], Monaco.MarkerSeverity> = {
   info: monaco.MarkerSeverity.Info,
 }
 
-/** Update Monaco markers from static analysis diagnostics for all open models. */
+/** Update Monaco markers from static analysis diagnostics for all models. */
 export function setDiagnosticMarkers(diagnostics: Diagnostic[]): void {
   // Group by file
   const byFile = new Map<string, Diagnostic[]>()
@@ -43,7 +43,7 @@ export function setDiagnosticMarkers(diagnostics: Diagnostic[]): void {
     byFile.set(d.file, list)
   }
 
-  // Set markers on each model
+  // Set markers on each model (models are kept alive for the project lifetime)
   for (const model of monaco.editor.getModels()) {
     const filePath = model.uri.path.startsWith('/') ? model.uri.path.slice(1) : model.uri.path
     const fileDiags = byFile.get(filePath) ?? []

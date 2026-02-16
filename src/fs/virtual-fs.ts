@@ -1,80 +1,6 @@
 import type { VirtualFile } from '../types'
 
-const DEFAULT_TEX = `\\documentclass[10pt,twocolumn]{article}
-\\usepackage{amsmath}
-\\usepackage{amssymb}
-\\usepackage{amsthm}
-\\emergencystretch=1em
-
-\\newtheorem{theorem}{Theorem}[section]
-\\newtheorem{lemma}[theorem]{Lemma}
-\\newtheorem{corollary}[theorem]{Corollary}
-\\newtheorem{proposition}[theorem]{Proposition}
-\\theoremstyle{definition}
-\\newtheorem{definition}[theorem]{Definition}
-\\newtheorem{example}[theorem]{Example}
-\\theoremstyle{remark}
-\\newtheorem{remark}[theorem]{Remark}
-
-\\title{A Survey of Fundamental Mathematics\\\\[4pt]
-  \\large From Algebra to Topology}
-\\author{Browser \\LaTeX{} Editor}
-\\date{\\today}
-
-\\begin{document}
-
-\\maketitle
-
-\\begin{abstract}
-This document provides a broad survey of fundamental areas
-in mathematics, ranging from algebra and analysis to
-probability, combinatorics, and topology. It serves as both
-a reference for key results and a demonstration of diverse
-\\LaTeX{} typesetting features: theorems and proofs, multi-line
-equations, tables, nested lists, cross-references, and more.
-The material is organized into self-contained sections, each
-introducing definitions, stating central theorems, and
-providing illustrative examples.
-\\end{abstract}
-
-\\tableofcontents
-
-\\newpage
-
-%% ============================================================
-\\section{Introduction}
-\\label{sec:intro}
-%% ============================================================
-
-Mathematics is built on a hierarchy of abstractions. At the
-base lie logic and set theory; above them rise algebra,
-analysis, geometry, and topology. This survey touches on
-several of these pillars, emphasizing results that recur
-across disciplines.
-
-We assume familiarity with basic notation: $\\mathbb{N}$
-(natural numbers), $\\mathbb{Z}$ (integers), $\\mathbb{Q}$
-(rationals), $\\mathbb{R}$ (reals), and $\\mathbb{C}$
-(complex numbers). Sets are denoted by capital letters,
-functions by lowercase letters, and operators by Greek
-letters where conventional.
-
-The reader may navigate this document using SyncTeX:
-click on any line in the PDF to jump to the corresponding
-source, or press Cmd/Ctrl+Enter in the editor to highlight
-the matching region in the PDF.
-
-Section~\\ref{sec:algebra} covers algebraic structures.
-Section~\\ref{sec:analysis} treats real and complex analysis.
-Section~\\ref{sec:linalg} discusses linear algebra.
-Section~\\ref{sec:numtheory} explores number theory.
-Section~\\ref{sec:probability} introduces probability.
-Section~\\ref{sec:combinatorics} surveys combinatorics.
-Section~\\ref{sec:topology} outlines point-set topology.
-Section~\\ref{sec:diffeq} addresses differential equations.
-We conclude in Section~\\ref{sec:conclusion}.
-
-%% ============================================================
+const DEFAULT_ALGEBRA = `%% ============================================================
 \\section{Algebra}
 \\label{sec:algebra}
 %% ============================================================
@@ -155,8 +81,9 @@ the roots:
   \\text{two complex conjugates} & \\text{if } \\Delta < 0.
 \\end{cases}
 \\]
+`
 
-%% ============================================================
+const DEFAULT_ANALYSIS = `%% ============================================================
 \\section{Real and Complex Analysis}
 \\label{sec:analysis}
 %% ============================================================
@@ -239,8 +166,9 @@ singularities $z_1, \\ldots, z_n$, then
     = 2\\pi i \\sum_{k=1}^{n} \\operatorname{Res}(f, z_k).
 \\]
 \\end{theorem}
+`
 
-%% ============================================================
+const DEFAULT_LINALG = `%% ============================================================
 \\section{Linear Algebra}
 \\label{sec:linalg}
 %% ============================================================
@@ -312,6 +240,85 @@ non-negative entries $\\sigma_1 \\geq \\sigma_2 \\geq \\cdots \\geq 0$.
 
 The matrix 2-norm equals $\\sigma_1$, and the rank of $A$
 equals the number of nonzero singular values.
+`
+
+const DEFAULT_TEX = `\\documentclass[10pt,twocolumn]{article}
+\\usepackage{amsmath}
+\\usepackage{amssymb}
+\\usepackage{amsthm}
+\\emergencystretch=1em
+
+\\newtheorem{theorem}{Theorem}[section]
+\\newtheorem{lemma}[theorem]{Lemma}
+\\newtheorem{corollary}[theorem]{Corollary}
+\\newtheorem{proposition}[theorem]{Proposition}
+\\theoremstyle{definition}
+\\newtheorem{definition}[theorem]{Definition}
+\\newtheorem{example}[theorem]{Example}
+\\theoremstyle{remark}
+\\newtheorem{remark}[theorem]{Remark}
+
+\\title{A Survey of Fundamental Mathematics\\\\[4pt]
+  \\large From Algebra to Topology}
+\\author{Browser \\LaTeX{} Editor}
+\\date{\\today}
+
+\\begin{document}
+
+\\maketitle
+
+\\begin{abstract}
+This document provides a broad survey of fundamental areas
+in mathematics, ranging from algebra and analysis to
+probability, combinatorics, and topology. It serves as both
+a reference for key results and a demonstration of diverse
+\\LaTeX{} typesetting features: theorems and proofs, multi-line
+equations, tables, nested lists, cross-references, and more.
+The material is organized into self-contained sections, each
+introducing definitions, stating central theorems, and
+providing illustrative examples.
+\\end{abstract}
+
+\\tableofcontents
+
+\\newpage
+
+%% ============================================================
+\\section{Introduction}
+\\label{sec:intro}
+%% ============================================================
+
+Mathematics is built on a hierarchy of abstractions. At the
+base lie logic and set theory; above them rise algebra,
+analysis, geometry, and topology. This survey touches on
+several of these pillars, emphasizing results that recur
+across disciplines.
+
+We assume familiarity with basic notation: $\\mathbb{N}$
+(natural numbers), $\\mathbb{Z}$ (integers), $\\mathbb{Q}$
+(rationals), $\\mathbb{R}$ (reals), and $\\mathbb{C}$
+(complex numbers). Sets are denoted by capital letters,
+functions by lowercase letters, and operators by Greek
+letters where conventional.
+
+The reader may navigate this document using SyncTeX:
+click on any line in the PDF to jump to the corresponding
+source, or press Cmd/Ctrl+Enter in the editor to highlight
+the matching region in the PDF.
+
+Section~\\ref{sec:algebra} covers algebraic structures.
+Section~\\ref{sec:analysis} treats real and complex analysis.
+Section~\\ref{sec:linalg} discusses linear algebra.
+Section~\\ref{sec:numtheory} explores number theory.
+Section~\\ref{sec:probability} introduces probability.
+Section~\\ref{sec:combinatorics} surveys combinatorics.
+Section~\\ref{sec:topology} outlines point-set topology.
+Section~\\ref{sec:diffeq} addresses differential equations.
+We conclude in Section~\\ref{sec:conclusion}.
+
+\\input{algebra}
+\\input{analysis}
+\\input{linalg}
 
 %% ============================================================
 \\section{Number Theory}
@@ -793,6 +800,9 @@ export class VirtualFS {
   constructor(options?: VirtualFSOptions) {
     if (!options?.empty) {
       this.writeFile('main.tex', DEFAULT_TEX)
+      this.writeFile('algebra.tex', DEFAULT_ALGEBRA)
+      this.writeFile('analysis.tex', DEFAULT_ANALYSIS)
+      this.writeFile('linalg.tex', DEFAULT_LINALG)
     }
   }
 

@@ -202,6 +202,34 @@ Postamble:
 Count:1
 `
 
+/**
+ * Fixture with Input entries appearing mid-content (multi-file \input)
+ * pdfTeX adds Input lines when \input{file} opens a new file during compilation
+ */
+const FIXTURE_MID_CONTENT_INPUTS = `SyncTeX Version:1
+Input:1:./main.tex
+Output:main.pdf
+Magnification:1000
+Unit:1
+X Offset:0
+Y Offset:0
+Content:
+{1
+[1,1:0,0:34611850,49825690,0
+(1,3:4736286,3670016:25137278,655360,0
+)
+Input:7:./algebra.tex
+(7,5:4736286,5242880:25137278,655360,0
+)
+Input:8:/work/./analysis.tex
+(8,10:4736286,6815744:25137278,655360,0
+)
+]
+}1
+Postamble:
+Count:5
+`
+
 // Conversion factor for default settings (unit=1, mag=1000)
 // pdf_pt = sp * 1 * 1000/1000 / 65536 * 72/72.27
 const SP_TO_PDF = (1 / 65536) * (72 / 72.27)
@@ -237,6 +265,20 @@ describe('SynctexParser', () => {
       const data = parser.parseText(FIXTURE_WASM_PATHS)
       expect(data.inputs.get(1)).toBe('main.tex')
       expect(data.inputs.get(2)).toBe('includes/chapter.tex')
+    })
+
+    it('parses Input entries that appear mid-content', () => {
+      const data = parser.parseText(FIXTURE_MID_CONTENT_INPUTS)
+      expect(data.inputs.size).toBe(3)
+      expect(data.inputs.get(1)).toBe('main.tex')
+      expect(data.inputs.get(7)).toBe('algebra.tex')
+      expect(data.inputs.get(8)).toBe('analysis.tex')
+      // Nodes from included files should be parsed correctly
+      const nodes = data.pages.get(1)!
+      const algebraNode = nodes.find((n) => n.input === 7 && n.line === 5)
+      expect(algebraNode).toBeDefined()
+      const analysisNode = nodes.find((n) => n.input === 8 && n.line === 10)
+      expect(analysisNode).toBeDefined()
     })
 
     it('parses nodes on page 1', () => {

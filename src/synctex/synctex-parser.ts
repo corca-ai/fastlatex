@@ -309,6 +309,22 @@ export class SynctexParser {
       yOffset: 0,
     }
 
+    /** Parse an Input: line and register it in result.inputs */
+    const parseInputLine = (line: string): void => {
+      const firstColon = line.indexOf(':')
+      const secondColon = line.indexOf(':', firstColon + 1)
+      if (secondColon !== -1) {
+        const tag = parseInt(line.slice(firstColon + 1, secondColon), 10)
+        let name = line.slice(secondColon + 1)
+        // Strip WASM working directory prefix: /work/./ or /work/ or plain ./
+        const dotSlashIdx = name.indexOf('/./')
+        if (dotSlashIdx !== -1) name = name.slice(dotSlashIdx + 3)
+        else if (name.startsWith('./')) name = name.slice(2)
+        else if (name.startsWith('/work/')) name = name.slice('/work/'.length)
+        result.inputs.set(tag, name)
+      }
+    }
+
     const lines = text.split('\n')
     let currentPage = 0
     let inContent = false
@@ -317,25 +333,20 @@ export class SynctexParser {
     for (const line of lines) {
       if (!line) continue
 
+      // Input entries can appear both in the preamble and mid-content
+      // (pdfTeX adds them when \input{file} opens a new file during compilation)
+      if (line.startsWith('Input:')) {
+        parseInputLine(line)
+        continue
+      }
+
       // Preamble section
       if (!inContent) {
         if (line === 'Content:') {
           inContent = true
           continue
         }
-        if (line.startsWith('Input:')) {
-          const firstColon = line.indexOf(':')
-          const secondColon = line.indexOf(':', firstColon + 1)
-          if (secondColon !== -1) {
-            const tag = parseInt(line.slice(firstColon + 1, secondColon), 10)
-            let name = line.slice(secondColon + 1)
-            // Strip WASM working directory prefix (/work/./) or plain ./
-            const dotSlashIdx = name.indexOf('/./')
-            if (dotSlashIdx !== -1) name = name.slice(dotSlashIdx + 3)
-            else if (name.startsWith('./')) name = name.slice(2)
-            result.inputs.set(tag, name)
-          }
-        } else if (line.startsWith('Magnification:')) {
+        if (line.startsWith('Magnification:')) {
           result.magnification = parseInt(line.slice('Magnification:'.length), 10)
         } else if (line.startsWith('Unit:')) {
           result.unit = parseInt(line.slice('Unit:'.length), 10)
