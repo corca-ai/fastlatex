@@ -1,6 +1,5 @@
 import type { CompileResult, EngineStatus } from '../types'
 import { parseTexErrors } from './parse-errors'
-import type { TexEngine } from './tex-engine'
 
 export interface SwiftLatexEngineOptions {
   /** Base URL for WASM assets. Defaults to `import.meta.env.BASE_URL`. */
@@ -29,7 +28,7 @@ interface WorkerMessage {
   [key: string]: unknown
 }
 
-export class SwiftLatexEngine implements TexEngine {
+export class SwiftLatexEngine {
   private worker: Worker | null = null
   private status: EngineStatus = 'unloaded'
   private texliveUrl: string | null

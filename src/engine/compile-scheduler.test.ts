@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CompileResult } from '../types'
 import { CompileScheduler } from './compile-scheduler'
-import type { TexEngine } from './tex-engine'
 
 function makeResult(overrides?: Partial<CompileResult>): CompileResult {
   return {
@@ -15,22 +14,16 @@ function makeResult(overrides?: Partial<CompileResult>): CompileResult {
   }
 }
 
-function mockEngine(compileResult?: CompileResult): TexEngine {
+function mockEngine(compileResult?: CompileResult) {
   const result = compileResult ?? makeResult()
   return {
-    init: vi.fn(),
-    writeFile: vi.fn(),
-    setMainFile: vi.fn(),
-    compile: vi.fn().mockResolvedValue(result),
-    readFile: vi.fn().mockResolvedValue(null),
-    isReady: vi.fn().mockReturnValue(true),
-    getStatus: vi.fn().mockReturnValue('ready'),
-    terminate: vi.fn(),
+    compile: vi.fn<() => Promise<CompileResult>>().mockResolvedValue(result),
+    isReady: vi.fn<() => boolean>().mockReturnValue(true),
   }
 }
 
 function sched(
-  engine: TexEngine,
+  engine: ReturnType<typeof mockEngine>,
   onResult: (result: CompileResult) => void,
   onStatus: (status: 'compiling') => void,
   opts?: { minDebounceMs?: number; maxDebounceMs?: number },

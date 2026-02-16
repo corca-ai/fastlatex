@@ -1,6 +1,5 @@
 import { perf } from '../perf/metrics'
 import type { CompileResult } from '../types'
-import type { TexEngine } from './tex-engine'
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))
@@ -16,7 +15,7 @@ export class CompileScheduler {
   private maxDebounceMs: number
 
   constructor(
-    private engine: TexEngine,
+    private engine: { compile(): Promise<CompileResult>; isReady(): boolean },
     private onResult: (result: CompileResult) => void,
     private onStatusChange: (status: 'compiling') => void,
     { minDebounceMs = 150, maxDebounceMs = 1000 } = {},
