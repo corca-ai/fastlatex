@@ -54,4 +54,34 @@ describe('parseAuxFile', () => {
     expect(result.labels.size).toBe(1)
     expect(result.labels.get('thm:main')).toBe('3.2')
   })
+
+  it('parses \\@input entries', () => {
+    const aux = `\\relax
+\\@input{chapter1.aux}
+\\@input{chapter2.aux}
+`
+    const result = parseAuxFile(aux)
+    expect(result.includes).toEqual(['chapter1.aux', 'chapter2.aux'])
+  })
+
+  it('parses mixed content with \\@input + \\newlabel + \\bibcite', () => {
+    const aux = `\\relax
+\\newlabel{sec:intro}{{1}{1}}
+\\@input{ch1.aux}
+\\bibcite{knuth84}{1}
+\\@input{ch2.aux}
+`
+    const result = parseAuxFile(aux)
+    expect(result.labels.size).toBe(1)
+    expect(result.citations.size).toBe(1)
+    expect(result.includes).toEqual(['ch1.aux', 'ch2.aux'])
+  })
+
+  it('returns empty includes when no \\@input', () => {
+    const aux = `\\relax
+\\newlabel{sec:intro}{{1}{1}}
+`
+    const result = parseAuxFile(aux)
+    expect(result.includes).toEqual([])
+  })
 })

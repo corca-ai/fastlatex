@@ -243,4 +243,24 @@ describe('ProjectIndex', () => {
     index.updateLogData('This is pdfTeX, Version 3.14159265\nNo packages here.')
     expect(index.getLoadedPackages().size).toBe(0)
   })
+
+  // --- Input files (Phase 4: multi-file project awareness) ---
+
+  it('stores and retrieves input files', () => {
+    const index = new ProjectIndex()
+    index.updateInputFiles(['main.tex', 'chapter1.tex', 'chapter2.tex'])
+    expect(index.getInputFiles()).toEqual(['main.tex', 'chapter1.tex', 'chapter2.tex'])
+  })
+
+  it('replaces input files on update', () => {
+    const index = new ProjectIndex()
+    index.updateInputFiles(['main.tex', 'old.tex'])
+    index.updateInputFiles(['main.tex', 'new.tex'])
+    expect(index.getInputFiles()).toEqual(['main.tex', 'new.tex'])
+  })
+
+  it('starts with empty input files', () => {
+    const index = new ProjectIndex()
+    expect(index.getInputFiles()).toEqual([])
+  })
 })

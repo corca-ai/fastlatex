@@ -24,6 +24,7 @@ interface WorkerMessage {
   data?: string
   preambleSnapshot?: boolean
   engineCommands?: string[]
+  inputFiles?: string[]
   [key: string]: unknown
 }
 
@@ -256,6 +257,9 @@ export class SwiftLatexEngine implements TexEngine {
     }
     if (data.engineCommands) {
       result.engineCommands = data.engineCommands
+    }
+    if (data.inputFiles) {
+      result.inputFiles = data.inputFiles
     }
     return result
   }

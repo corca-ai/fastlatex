@@ -16,6 +16,8 @@ export function computeDiagnostics(index: ProjectIndex): Diagnostic[] {
   findUndefinedRefs(index, diagnostics)
   findUndefinedCitations(index, diagnostics)
   findDuplicateLabels(index, diagnostics)
+  findUnreferencedLabels(index, diagnostics)
+  findMissingIncludes(index, diagnostics)
   return diagnostics
 }
 
@@ -91,6 +93,49 @@ function findDuplicateLabels(index: ProjectIndex, out: Diagnostic[]): void {
       })
     } else {
       seen.set(label.name, { file: label.location.file, line: label.location.line })
+    }
+  }
+}
+
+function findUnreferencedLabels(index: ProjectIndex, out: Diagnostic[]): void {
+  const refdNames = new Set<string>()
+  for (const file of index.getFiles()) {
+    const symbols = index.getFileSymbols(file)
+    if (!symbols) continue
+    for (const ref of symbols.labelRefs) refdNames.add(ref.name)
+  }
+  for (const label of index.getAllLabels()) {
+    if (!refdNames.has(label.name)) {
+      out.push({
+        file: label.location.file,
+        line: label.location.line,
+        column: label.location.column,
+        endColumn: label.location.column + label.name.length + 7,
+        message: `Label '${label.name}' is never referenced`,
+        severity: 'info',
+        code: 'unreferenced-label',
+      })
+    }
+  }
+}
+
+function findMissingIncludes(index: ProjectIndex, out: Diagnostic[]): void {
+  for (const file of index.getFiles()) {
+    const symbols = index.getFileSymbols(file)
+    if (!symbols) continue
+    for (const inc of symbols.includes) {
+      const target = inc.path.endsWith('.tex') ? inc.path : `${inc.path}.tex`
+      if (!index.getFileSymbols(target)) {
+        out.push({
+          file,
+          line: inc.location.line,
+          column: inc.location.column,
+          endColumn: inc.location.column + inc.path.length + 7,
+          message: `Included file '${target}' not found in project`,
+          severity: 'warning',
+          code: 'missing-include',
+        })
+      }
     }
   }
 }

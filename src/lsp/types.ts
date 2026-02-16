@@ -71,6 +71,7 @@ export interface FileSymbols {
 export interface AuxData {
   labels: Map<string, string>
   citations: Set<string>
+  includes: string[]
 }
 
 export interface BibitemDef {

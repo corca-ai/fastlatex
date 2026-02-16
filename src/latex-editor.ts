@@ -3,6 +3,7 @@ import { createEditor, revealLine, setEditorContent } from './editor/setup'
 import { CompileScheduler } from './engine/compile-scheduler'
 import { SwiftLatexEngine } from './engine/swiftlatex-engine'
 import { VirtualFS } from './fs/virtual-fs'
+import { parseAuxFile } from './lsp/aux-parser'
 import { computeDiagnostics } from './lsp/diagnostic-provider'
 import { ProjectIndex } from './lsp/project-index'
 import { registerLatexProviders } from './lsp/register-providers'
@@ -153,6 +154,9 @@ export class LatexEditor {
 
   setFile(path: string, content: string | Uint8Array): void {
     this.fs.writeFile(path, content)
+    if (typeof content === 'string' && path.endsWith('.tex')) {
+      this.projectIndex.updateFile(path, content)
+    }
     if (path === this.currentFile && this.editor) {
       const text = typeof content === 'string' ? content : new TextDecoder().decode(content)
       setEditorContent(this.editor, text, path.endsWith('.tex') ? 'latex' : 'plaintext')
@@ -427,17 +431,32 @@ export class LatexEditor {
     })
   }
 
-  private onCompileResult(result: CompileResult): void {
-    perf.end('compile')
-
-    const detail = result.preambleSnapshot ? '(cached preamble)' : undefined
-
+  private updateEngineMetadata(result: CompileResult): void {
     if (result.engineCommands?.length) {
       this.projectIndex.updateEngineCommands(result.engineCommands)
     }
     if (result.log) {
       this.projectIndex.updateLogData(result.log)
     }
+    if (result.inputFiles?.length) {
+      this.projectIndex.updateInputFiles(result.inputFiles)
+      for (const path of result.inputFiles) {
+        if (!this.projectIndex.getFileSymbols(path)) {
+          const file = this.fs.getFile(path)
+          if (file && typeof file.content === 'string') {
+            this.projectIndex.updateFile(path, file.content)
+          }
+        }
+      }
+    }
+  }
+
+  private onCompileResult(result: CompileResult): void {
+    perf.end('compile')
+
+    const detail = result.preambleSnapshot ? '(cached preamble)' : undefined
+
+    this.updateEngineMetadata(result)
 
     if (result.success && result.pdf) {
       for (const path of this.fs.listFiles()) {
@@ -515,9 +534,21 @@ export class LatexEditor {
     this.engine
       .readFile(`${mainBase}.aux`)
       .then((auxContent) => {
-        if (auxContent) {
-          this.projectIndex.updateAux(auxContent)
-        }
+        if (!auxContent) return
+        const auxData = parseAuxFile(auxContent)
+        // Read sub-aux files referenced by \@input{...}
+        const pending = auxData.includes.map((inc) =>
+          this.engine.readFile(inc).then((sub) => (sub ? parseAuxFile(sub) : null)),
+        )
+        Promise.all(pending).then((subResults) => {
+          for (const sub of subResults) {
+            if (!sub) continue
+            for (const [k, v] of sub.labels) auxData.labels.set(k, v)
+            for (const c of sub.citations) auxData.citations.add(c)
+          }
+          this.projectIndex.updateAuxData(auxData)
+          this.runDiagnostics()
+        })
       })
       .catch(() => {
         // .aux file may not exist on first compile or after errors

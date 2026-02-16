@@ -11,6 +11,8 @@ export interface CompileResult {
   preambleSnapshot?: boolean
   /** Control sequences from pdfTeX hash table (package + user commands) */
   engineCommands?: string[]
+  /** Input .tex files discovered by pdfTeX -recorder (.fls) */
+  inputFiles?: string[]
 }
 
 export interface TexError {

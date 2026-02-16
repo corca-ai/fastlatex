@@ -67,17 +67,75 @@ describe('computeDiagnostics', () => {
     index.updateFile('a.tex', '\\label{dup}')
     index.updateFile('b.tex', '\\label{dup}')
     const diags = computeDiagnostics(index)
-    expect(diags).toHaveLength(1)
-    expect(diags[0]!.code).toBe('duplicate-label')
-    expect(diags[0]!.message).toContain('dup')
-    expect(diags[0]!.file).toBe('b.tex')
+    const dupDiags = diags.filter((d) => d.code === 'duplicate-label')
+    expect(dupDiags).toHaveLength(1)
+    expect(dupDiags[0]!.message).toContain('dup')
+    expect(dupDiags[0]!.file).toBe('b.tex')
   })
 
   it('detects multiple issues together', () => {
     const index = new ProjectIndex()
     index.updateFile('main.tex', '\\ref{missing}\n\\cite{noexist}\n\\label{a}\n\\label{a}')
     const diags = computeDiagnostics(index)
-    const codes = diags.map((d) => d.code).sort()
-    expect(codes).toEqual(['duplicate-label', 'undefined-cite', 'undefined-ref'])
+    const codes = new Set(diags.map((d) => d.code))
+    expect(codes).toContain('duplicate-label')
+    expect(codes).toContain('undefined-cite')
+    expect(codes).toContain('undefined-ref')
+    expect(codes).toContain('unreferenced-label')
+  })
+
+  // --- Unreferenced labels ---
+
+  it('detects unreferenced label', () => {
+    const index = new ProjectIndex()
+    index.updateFile('main.tex', '\\label{unused}')
+    const diags = computeDiagnostics(index)
+    expect(diags).toHaveLength(1)
+    expect(diags[0]!.code).toBe('unreferenced-label')
+    expect(diags[0]!.severity).toBe('info')
+    expect(diags[0]!.message).toContain('unused')
+  })
+
+  it('does not flag label that has a ref', () => {
+    const index = new ProjectIndex()
+    index.updateFile('main.tex', '\\label{used}\n\\ref{used}')
+    const diags = computeDiagnostics(index)
+    expect(diags.filter((d) => d.code === 'unreferenced-label')).toHaveLength(0)
+  })
+
+  it('detects unreferenced label across files', () => {
+    const index = new ProjectIndex()
+    index.updateFile('main.tex', '\\label{sec:intro}')
+    index.updateFile('ch1.tex', '\\ref{sec:intro}')
+    const diags = computeDiagnostics(index)
+    expect(diags.filter((d) => d.code === 'unreferenced-label')).toHaveLength(0)
+  })
+
+  // --- Missing includes ---
+
+  it('detects missing include file', () => {
+    const index = new ProjectIndex()
+    index.updateFile('main.tex', '\\input{missing}')
+    const diags = computeDiagnostics(index)
+    expect(diags).toHaveLength(1)
+    expect(diags[0]!.code).toBe('missing-include')
+    expect(diags[0]!.severity).toBe('warning')
+    expect(diags[0]!.message).toContain('missing.tex')
+  })
+
+  it('does not flag include when file is indexed', () => {
+    const index = new ProjectIndex()
+    index.updateFile('main.tex', '\\input{chapter1}')
+    index.updateFile('chapter1.tex', '\\section{Chapter 1}')
+    const diags = computeDiagnostics(index)
+    expect(diags.filter((d) => d.code === 'missing-include')).toHaveLength(0)
+  })
+
+  it('handles include with .tex extension', () => {
+    const index = new ProjectIndex()
+    index.updateFile('main.tex', '\\input{chapter1.tex}')
+    index.updateFile('chapter1.tex', '\\section{Chapter 1}')
+    const diags = computeDiagnostics(index)
+    expect(diags.filter((d) => d.code === 'missing-include')).toHaveLength(0)
   })
 })

@@ -71,8 +71,9 @@ function detectEnvironments(names: Set<string>): Set<string> {
 
 export class ProjectIndex {
   private files = new Map<string, FileSymbols>()
-  private auxData: AuxData = { labels: new Map(), citations: new Set() }
+  private auxData: AuxData = { labels: new Map(), citations: new Set(), includes: [] }
   private bibEntries: BibEntry[] = []
+  private inputFiles: string[] = []
   private engineCommands = new Map<string, EngineCommandInfo>()
   private engineEnvironments = new Set<string>()
   private loadedPackages = new Map<string, string>()
@@ -91,6 +92,18 @@ export class ProjectIndex {
 
   updateBib(entries: BibEntry[]): void {
     this.bibEntries = entries
+  }
+
+  updateAuxData(data: AuxData): void {
+    this.auxData = data
+  }
+
+  updateInputFiles(files: string[]): void {
+    this.inputFiles = files
+  }
+
+  getInputFiles(): readonly string[] {
+    return this.inputFiles
   }
 
   // --- Queries ---

@@ -595,7 +595,7 @@ function compileLaTeXRoutine() {
     var status;
     try {
         status = runMain("pdflatex", ["-interaction=nonstopmode", "-synctex=1",
-                                       "&pdflatex", self.mainfile]);
+                                       "-recorder", "&pdflatex", self.mainfile]);
     } catch(e) {
         if (e instanceof ExitStatus) {
             status = e.status;
@@ -650,7 +650,7 @@ function compileLaTeXRoutine() {
         writeTexmfCnf();
         try {
             status = runMain("pdflatex", ["-interaction=nonstopmode", "-synctex=1",
-                                           "&pdflatex", self.mainfile]);
+                                           "-recorder", "&pdflatex", self.mainfile]);
         } catch(e) {
             if (e instanceof ExitStatus) {
                 status = e.status;
@@ -676,6 +676,24 @@ function compileLaTeXRoutine() {
         try { FS.unlink(WORKROOT + "/.commands"); } catch(e2) {}
     } catch(e) {}
 
+    // Read .fls (file recorder output) to discover input files.
+    var baseName = self.mainfile.substr(0, self.mainfile.length - 4);
+    var inputFiles = null;
+    try {
+        var flsData = FS.readFile(WORKROOT + "/" + baseName + ".fls", { encoding: "utf8" });
+        if (flsData) {
+            inputFiles = flsData.trimEnd().split("\n")
+                .filter(function(l) { return l.startsWith("INPUT "); })
+                .map(function(l) { return l.slice(6); })
+                .filter(function(p) { return p.startsWith(WORKROOT + "/"); })
+                .map(function(p) { return p.slice(WORKROOT.length + 1); })
+                .filter(function(p) { return p.endsWith(".tex"); });
+            // Deduplicate
+            inputFiles = Array.from(new Set(inputFiles));
+        }
+        try { FS.unlink(WORKROOT + "/" + baseName + ".fls"); } catch(e2) {}
+    } catch(e) {}
+
     // pdfTeX exit code 0 = success, 1 = completed with warnings/errors.
     // Both can produce valid PDF output, so try to read it for either.
     if (status === 0 || status === 1) {
@@ -683,7 +701,6 @@ function compileLaTeXRoutine() {
 
         _compileBibtex();
 
-        var baseName = self.mainfile.substr(0, self.mainfile.length - 4);
         var pdfPath = WORKROOT + "/" + baseName + ".pdf";
 
         try {
@@ -695,7 +712,8 @@ function compileLaTeXRoutine() {
                 "status": status,
                 "log": self.memlog,
                 "cmd": "compile",
-                "engineCommands": engineCommands
+                "engineCommands": engineCommands,
+                "inputFiles": inputFiles
             });
             return;
         }
@@ -722,7 +740,8 @@ function compileLaTeXRoutine() {
             "pdf": pdfArrayBuffer.buffer,
             "cmd": "compile",
             "preambleSnapshot": usedPreamble,
-            "engineCommands": engineCommands
+            "engineCommands": engineCommands,
+            "inputFiles": inputFiles
         };
 
         var transferables = [pdfArrayBuffer.buffer];
@@ -749,7 +768,8 @@ function compileLaTeXRoutine() {
             "log": self.memlog,
             "cmd": "compile",
             "preambleSnapshot": false,
-            "engineCommands": engineCommands
+            "engineCommands": engineCommands,
+            "inputFiles": inputFiles
         });
     }
 }
