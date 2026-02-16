@@ -3,13 +3,14 @@ import { createEditor, revealLine, setEditorContent } from './editor/setup'
 import { CompileScheduler } from './engine/compile-scheduler'
 import { SwiftLatexEngine } from './engine/swiftlatex-engine'
 import { VirtualFS } from './fs/virtual-fs'
+import { computeDiagnostics } from './lsp/diagnostic-provider'
 import { ProjectIndex } from './lsp/project-index'
 import { registerLatexProviders } from './lsp/register-providers'
 import { initPerfOverlay, perf } from './perf/metrics'
 import { SynctexParser } from './synctex/synctex-parser'
 import type { AppStatus, CompileResult, LatexEditorEventMap, LatexEditorOptions } from './types'
 import { ErrorLog } from './ui/error-log'
-import { setErrorMarkers } from './ui/error-markers'
+import { setDiagnosticMarkers, setErrorMarkers } from './ui/error-markers'
 import { FileTree } from './ui/file-tree'
 import { setupDividers } from './ui/layout'
 import { PdfViewer } from './viewer/pdf-viewer'
@@ -395,6 +396,7 @@ export class LatexEditor {
     perf.mark('debounce')
     this.fs.writeFile(this.currentFile, content)
     this.projectIndex.updateFile(this.currentFile, content)
+    this.runDiagnostics()
     this.emit('filechange', { path: this.currentFile, content })
     this.syncAndCompile()
   }
@@ -461,6 +463,7 @@ export class LatexEditor {
     this.errorLog.update(result.errors)
     setErrorMarkers(this.editor, result.errors)
     this.updateAuxIndex()
+    this.runDiagnostics()
     this.maybeRecompile(result)
     this.emit('compile', { result })
   }
@@ -519,6 +522,11 @@ export class LatexEditor {
       .catch(() => {
         // .aux file may not exist on first compile or after errors
       })
+  }
+
+  private runDiagnostics(): void {
+    const diagnostics = computeDiagnostics(this.projectIndex)
+    setDiagnosticMarkers(diagnostics)
   }
 
   private downloadPdf(): void {

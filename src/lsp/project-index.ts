@@ -79,6 +79,10 @@ export class ProjectIndex {
 
   // --- Queries ---
 
+  getFiles(): string[] {
+    return [...this.files.keys()]
+  }
+
   getAllLabels(): LabelDef[] {
     return [...this.files.values()].flatMap((s) => s.labels)
   }

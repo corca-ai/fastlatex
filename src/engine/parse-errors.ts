@@ -16,44 +16,58 @@ function findBoxLineNumber(line: string, nextLine: string): number {
   return m ? parseInt(m[1]!, 10) : 0
 }
 
+/** Extract "on input line N" from a log line, or 0 */
+function extractInputLine(line: string): number {
+  const m = line.match(/on input line (\d+)/)
+  return m ? parseInt(m[1]!, 10) : 0
+}
+
+function tryTexError(line: string, lines: string[], i: number, out: TexError[]): boolean {
+  const m = line.match(/^! (.+)/)
+  if (!m) return false
+  out.push({ line: findLineNumber(lines, i + 1), message: m[1]!, severity: 'error' })
+  return true
+}
+
+function tryLatexWarning(line: string, out: TexError[]): boolean {
+  const m = line.match(/LaTeX Warning:\s*(.+)/)
+  if (!m) return false
+  out.push({ line: extractInputLine(line), message: m[1]!, severity: 'warning' })
+  return true
+}
+
+function tryPackageError(line: string, lines: string[], i: number, out: TexError[]): boolean {
+  const m = line.match(/^Package (\S+) Error:\s*(.+)/)
+  if (!m) return false
+  const lineNum = extractInputLine(line) || findLineNumber(lines, i + 1)
+  out.push({ line: lineNum, message: `[${m[1]}] ${m[2]}`, severity: 'error' })
+  return true
+}
+
+function tryPackageWarning(line: string, out: TexError[]): boolean {
+  const m = line.match(/^Package (\S+) Warning:\s*(.+)/)
+  if (!m) return false
+  out.push({ line: extractInputLine(line), message: `[${m[1]}] ${m[2]}`, severity: 'warning' })
+  return true
+}
+
+function tryBoxWarning(line: string, nextLine: string, out: TexError[]): boolean {
+  if (!/^Overfull \\[hv]box .+/.test(line)) return false
+  out.push({ line: findBoxLineNumber(line, nextLine), message: line, severity: 'warning' })
+  return true
+}
+
 export function parseTexErrors(log: string): TexError[] {
   const errors: TexError[] = []
   const lines = log.split('\n')
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]!
-
-    // Match "! Error message" pattern
-    const errorMatch = line.match(/^! (.+)/)
-    if (errorMatch) {
-      errors.push({
-        line: findLineNumber(lines, i + 1),
-        message: errorMatch[1]!,
-        severity: 'error',
-      })
-      continue
-    }
-
-    // Match "LaTeX Warning:" pattern
-    const warnMatch = line.match(/LaTeX Warning:\s*(.+)/)
-    if (warnMatch) {
-      const m = line.match(/on input line (\d+)/)
-      errors.push({
-        line: m ? parseInt(m[1]!, 10) : 0,
-        message: warnMatch[1]!,
-        severity: 'warning',
-      })
-      continue
-    }
-
-    // Match "Overfull \hbox ..." warnings (skip Underfull — rarely actionable)
-    if (/^Overfull \\[hv]box .+/.test(line)) {
-      errors.push({
-        line: findBoxLineNumber(line, lines[i + 1] ?? ''),
-        message: line,
-        severity: 'warning',
-      })
-    }
+    if (tryTexError(line, lines, i, errors)) continue
+    if (tryLatexWarning(line, errors)) continue
+    if (tryPackageError(line, lines, i, errors)) continue
+    if (tryPackageWarning(line, errors)) continue
+    tryBoxWarning(line, lines[i + 1] ?? '', errors)
   }
 
   return errors

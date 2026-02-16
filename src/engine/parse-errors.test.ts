@@ -145,4 +145,40 @@ describe('parseTexErrors', () => {
     expect(errors[1]!.severity).toBe('warning')
     expect(errors[1]!.line).toBe(20)
   })
+
+  it('parses package error with line number', () => {
+    const log = 'Package amsmath Error: Multiple \\tag on input line 42.\n'
+    const errors = parseTexErrors(log)
+    expect(errors).toHaveLength(1)
+    expect(errors[0]!.severity).toBe('error')
+    expect(errors[0]!.line).toBe(42)
+    expect(errors[0]!.message).toContain('[amsmath]')
+    expect(errors[0]!.message).toContain('Multiple \\tag')
+  })
+
+  it('parses package error with lookahead line number', () => {
+    const log = ['Package hyperref Error: No driver specified.', 'l.10 \\begin{document}'].join(
+      '\n',
+    )
+    const errors = parseTexErrors(log)
+    expect(errors).toHaveLength(1)
+    expect(errors[0]!.line).toBe(10)
+  })
+
+  it('parses package warning', () => {
+    const log = 'Package natbib Warning: Citation `foo` undefined on input line 15.\n'
+    const errors = parseTexErrors(log)
+    expect(errors).toHaveLength(1)
+    expect(errors[0]!.severity).toBe('warning')
+    expect(errors[0]!.line).toBe(15)
+    expect(errors[0]!.message).toContain('[natbib]')
+  })
+
+  it('parses package warning without line number', () => {
+    const log = 'Package hyperref Warning: Rerun to get /PageLabels entry.\n'
+    const errors = parseTexErrors(log)
+    expect(errors).toHaveLength(1)
+    expect(errors[0]!.severity).toBe('warning')
+    expect(errors[0]!.line).toBe(0)
+  })
 })
