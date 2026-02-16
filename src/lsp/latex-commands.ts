@@ -1,4 +1,4 @@
-export interface LatexCommand {
+interface LatexCommand {
   name: string
   snippet: string
   detail?: string
@@ -6,7 +6,7 @@ export interface LatexCommand {
   package?: string
 }
 
-export interface LatexEnvironment {
+interface LatexEnvironment {
   name: string
   snippet: string
   detail?: string

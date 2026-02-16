@@ -1,6 +1,6 @@
 import type * as pdfjsLib from 'pdfjs-dist'
 
-export interface PageRenderResult {
+interface PageRenderResult {
   wrapper: HTMLDivElement
   canvas: HTMLCanvasElement
   pageNum: number
@@ -51,11 +51,6 @@ export class PageRenderer {
     for (const c of canvases) {
       this.canvasPool.push(c)
     }
-  }
-
-  /** Clear the canvas pool. */
-  clearPool(): void {
-    this.canvasPool.length = 0
   }
 
   private acquireCanvas(): HTMLCanvasElement {

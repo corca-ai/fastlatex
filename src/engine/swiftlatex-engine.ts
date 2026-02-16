@@ -46,11 +46,6 @@ export class SwiftLatexEngine implements TexEngine {
     this.texliveUrl = options?.texliveUrl ?? null
   }
 
-  /** Set a custom TexLive endpoint before init(). Default is baked into the worker. */
-  setTexliveUrl(url: string): void {
-    this.texliveUrl = url
-  }
-
   async init(): Promise<void> {
     if (this.worker) {
       throw new Error('Engine already initialized')
@@ -219,12 +214,6 @@ export class SwiftLatexEngine implements TexEngine {
     this.worker!.postMessage({ cmd: 'writefile', url: path, src: content })
   }
 
-  mkdir(path: string): void {
-    this.checkInitialized()
-    if (!path || path === '/') return
-    this.worker!.postMessage({ cmd: 'mkdir', url: path })
-  }
-
   setMainFile(path: string): void {
     this.checkInitialized()
     this.worker!.postMessage({ cmd: 'setmainfile', url: path })
@@ -282,11 +271,6 @@ export class SwiftLatexEngine implements TexEngine {
 
   getStatus(): EngineStatus {
     return this.status
-  }
-
-  flushCache(): void {
-    this.checkInitialized()
-    this.worker!.postMessage({ cmd: 'flushcache' })
   }
 
   terminate(): void {

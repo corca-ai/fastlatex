@@ -5,12 +5,10 @@ import type {
   AuxData,
   BibEntry,
   BibitemDef,
-  CitationRef,
   CommandDef,
   FileSymbols,
   LabelDef,
   LabelRef,
-  SectionDef,
 } from './types'
 
 export interface EngineCommandInfo {
@@ -74,14 +72,9 @@ export class ProjectIndex {
   private files = new Map<string, FileSymbols>()
   private auxData: AuxData = { labels: new Map(), citations: new Set(), includes: [] }
   private bibEntries: BibEntry[] = []
-  private inputFiles: string[] = []
   private engineCommands = new Map<string, EngineCommandInfo>()
   private engineEnvironments = new Set<string>()
-  private loadedPackages = new Map<string, string>()
   private semanticTrace: SemanticTrace | null = null
-  private engineRefWarnings = new Set<string>()
-  private engineCiteWarnings = new Set<string>()
-  private engineDuplicateLabels = new Set<string>()
 
   updateFile(filePath: string, content: string): void {
     this.files.set(filePath, parseLatexFile(content, filePath))
@@ -103,14 +96,6 @@ export class ProjectIndex {
     this.auxData = data
   }
 
-  updateInputFiles(files: string[]): void {
-    this.inputFiles = files
-  }
-
-  getInputFiles(): readonly string[] {
-    return this.inputFiles
-  }
-
   // --- Queries ---
 
   getFiles(): string[] {
@@ -123,14 +108,6 @@ export class ProjectIndex {
 
   getAllLabelRefs(name: string): LabelRef[] {
     return [...this.files.values()].flatMap((s) => s.labelRefs.filter((r) => r.name === name))
-  }
-
-  getAllCitations(): CitationRef[] {
-    return [...this.files.values()].flatMap((s) => s.citations)
-  }
-
-  getAllSections(): SectionDef[] {
-    return [...this.files.values()].flatMap((s) => s.sections)
   }
 
   getFileSymbols(filePath: string): FileSymbols | undefined {
@@ -214,43 +191,6 @@ export class ProjectIndex {
 
   getSemanticTrace(): SemanticTrace | null {
     return this.semanticTrace
-  }
-
-  getEngineRefWarnings(): ReadonlySet<string> {
-    return this.engineRefWarnings
-  }
-
-  getEngineCiteWarnings(): ReadonlySet<string> {
-    return this.engineCiteWarnings
-  }
-
-  getEngineDuplicateLabels(): ReadonlySet<string> {
-    return this.engineDuplicateLabels
-  }
-
-  updateLogData(log: string): void {
-    this.loadedPackages = new Map()
-    const re = /^Package:\s+(\S+)\s+\d{4}\/\d{2}\/\d{2}\s+(v?\S+)/gm
-    for (const m of log.matchAll(re)) {
-      this.loadedPackages.set(m[1]!, m[2]!)
-    }
-
-    this.engineRefWarnings = new Set()
-    this.engineCiteWarnings = new Set()
-    this.engineDuplicateLabels = new Set()
-    for (const m of log.matchAll(/Reference [`'](.+?)' on page \d+ undefined/g)) {
-      this.engineRefWarnings.add(m[1]!)
-    }
-    for (const m of log.matchAll(/Citation [`'](.+?)' on page \d+ undefined/g)) {
-      this.engineCiteWarnings.add(m[1]!)
-    }
-    for (const m of log.matchAll(/Label [`'](.+?)' multiply defined/g)) {
-      this.engineDuplicateLabels.add(m[1]!)
-    }
-  }
-
-  getLoadedPackages(): ReadonlyMap<string, string> {
-    return this.loadedPackages
   }
 
   /** Find the BibitemDef for a given citation key */

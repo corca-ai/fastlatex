@@ -516,16 +516,12 @@ export class LatexEditor {
     if (result.engineCommands?.length) {
       this.projectIndex.updateEngineCommands(result.engineCommands)
     }
-    if (result.log) {
-      this.projectIndex.updateLogData(result.log)
-    }
     if (result.semanticTrace) {
       this.projectIndex.updateSemanticTrace(parseTraceFile(result.semanticTrace))
     } else {
       this.projectIndex.updateSemanticTrace({ labels: new Set(), refs: new Set() })
     }
     if (result.inputFiles?.length) {
-      this.projectIndex.updateInputFiles(result.inputFiles)
       for (const path of result.inputFiles) {
         if (!this.projectIndex.getFileSymbols(path)) {
           const file = this.fs.getFile(path)

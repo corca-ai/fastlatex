@@ -4,7 +4,7 @@
  * In debug mode (?perf=1) an overlay shows live timings.
  */
 
-export interface SpanTiming {
+interface SpanTiming {
   name: string
   ms: number
 }

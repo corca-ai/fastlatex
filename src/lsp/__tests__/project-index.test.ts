@@ -56,18 +56,6 @@ describe('ProjectIndex', () => {
     expect(refs).toHaveLength(2)
   })
 
-  it('aggregates citations', () => {
-    const index = new ProjectIndex()
-    index.updateFile('main.tex', '\\cite{a,b}\n\\cite{c}')
-    expect(index.getAllCitations()).toHaveLength(3)
-  })
-
-  it('aggregates sections', () => {
-    const index = new ProjectIndex()
-    index.updateFile('main.tex', '\\section{Intro}\n\\subsection{Detail}')
-    expect(index.getAllSections()).toHaveLength(2)
-  })
-
   it('aggregates command defs', () => {
     const index = new ProjectIndex()
     index.updateFile('main.tex', '\\newcommand{\\foo}{bar}')
@@ -229,42 +217,6 @@ describe('ProjectIndex', () => {
     expect(cmds.size).toBe(2)
   })
 
-  it('parses package info from log', () => {
-    const index = new ProjectIndex()
-    index.updateLogData(
-      'Package: amsmath 2020/09/23 v2.17i AMS math features\n' +
-        'Package: graphicx 2019/11/30 v1.2a Enhanced LaTeX Graphics\n',
-    )
-    expect(index.getLoadedPackages().get('amsmath')).toBe('v2.17i')
-    expect(index.getLoadedPackages().get('graphicx')).toBe('v1.2a')
-  })
-
-  it('handles log with no package lines', () => {
-    const index = new ProjectIndex()
-    index.updateLogData('This is pdfTeX, Version 3.14159265\nNo packages here.')
-    expect(index.getLoadedPackages().size).toBe(0)
-  })
-
-  // --- Input files (Phase 4: multi-file project awareness) ---
-
-  it('stores and retrieves input files', () => {
-    const index = new ProjectIndex()
-    index.updateInputFiles(['main.tex', 'chapter1.tex', 'chapter2.tex'])
-    expect(index.getInputFiles()).toEqual(['main.tex', 'chapter1.tex', 'chapter2.tex'])
-  })
-
-  it('replaces input files on update', () => {
-    const index = new ProjectIndex()
-    index.updateInputFiles(['main.tex', 'old.tex'])
-    index.updateInputFiles(['main.tex', 'new.tex'])
-    expect(index.getInputFiles()).toEqual(['main.tex', 'new.tex'])
-  })
-
-  it('starts with empty input files', () => {
-    const index = new ProjectIndex()
-    expect(index.getInputFiles()).toEqual([])
-  })
-
   // --- Semantic trace ---
 
   it('stores and retrieves semantic trace', () => {
@@ -284,38 +236,5 @@ describe('ProjectIndex', () => {
   it('starts with null semantic trace', () => {
     const index = new ProjectIndex()
     expect(index.getSemanticTrace()).toBeNull()
-  })
-
-  // --- Log warning parsing ---
-
-  it('parses undefined reference warnings from log', () => {
-    const index = new ProjectIndex()
-    index.updateLogData(
-      "LaTeX Warning: Reference `foo' on page 1 undefined on input line 5.\n" +
-        "LaTeX Warning: Reference `bar' on page 2 undefined on input line 10.\n",
-    )
-    expect(index.getEngineRefWarnings().has('foo')).toBe(true)
-    expect(index.getEngineRefWarnings().has('bar')).toBe(true)
-    expect(index.getEngineRefWarnings().size).toBe(2)
-  })
-
-  it('parses undefined citation warnings from log', () => {
-    const index = new ProjectIndex()
-    index.updateLogData("LaTeX Warning: Citation `knuth84' on page 3 undefined on input line 20.\n")
-    expect(index.getEngineCiteWarnings().has('knuth84')).toBe(true)
-  })
-
-  it('parses duplicate label warnings from log', () => {
-    const index = new ProjectIndex()
-    index.updateLogData("LaTeX Warning: Label `sec:intro' multiply defined.\n")
-    expect(index.getEngineDuplicateLabels().has('sec:intro')).toBe(true)
-  })
-
-  it('clears previous warnings on updateLogData', () => {
-    const index = new ProjectIndex()
-    index.updateLogData("LaTeX Warning: Reference `foo' on page 1 undefined on input line 5.\n")
-    expect(index.getEngineRefWarnings().size).toBe(1)
-    index.updateLogData('This is pdfTeX, no warnings here.')
-    expect(index.getEngineRefWarnings().size).toBe(0)
   })
 })

@@ -19,7 +19,7 @@ export type { PdfLocation, SourceLocation } from './text-mapper'
 
 import type { PdfLocation, SourceLocation } from './text-mapper'
 
-export interface SynctexNode {
+interface SynctexNode {
   type: 'hbox' | 'vbox' | 'kern' | 'glue' | 'math' | 'void_vbox' | 'void_hbox'
   input: number
   line: number

@@ -365,19 +365,4 @@ export class PdfViewer {
       setTimeout(() => highlight.remove(), 500)
     }, 2000)
   }
-
-  clear(): void {
-    if (this.pageObserver) {
-      this.pageObserver.disconnect()
-      this.pageObserver = null
-    }
-    this.pageRenderer.clearPool()
-    this.pagesContainer.innerHTML = ''
-    this.controlsEl.style.display = 'none'
-    if (this.pdfDoc) {
-      this.pdfDoc.destroy()
-      this.pdfDoc = null
-    }
-    this.lastPdf = null
-  }
 }

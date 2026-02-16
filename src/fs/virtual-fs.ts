@@ -797,7 +797,7 @@ for comprehensive treatments.
 \\end{document}
 `
 
-export interface VirtualFSOptions {
+interface VirtualFSOptions {
   /** If true, start with no files (skip default main.tex template). */
   empty?: boolean
 }
