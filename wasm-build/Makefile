@@ -43,6 +43,7 @@ DIST         = /dist
 WORKER_TMPL  = /src/worker-template.js
 WASM_ENTRY   = /src/wasm-entry.c
 KPSE_HOOK    = /src/kpse-hook.c
+TRACE_HOOK   = /src/trace-hook.c
 JSLIB        = /src/library.js
 
 # --- Source directories (shortcuts) ------------------------------------------
@@ -192,7 +193,7 @@ EMCC_FLAGS = \
 	-sEXIT_RUNTIME=0 \
 	-sINVOKE_RUN=0 \
 	-sMODULARIZE=0 \
-	-sEXPORTED_FUNCTIONS='["_compileLaTeX","_compileBibtex","_compileFormat","_main","_setMainEntry","_malloc","_free"]' \
+	-sEXPORTED_FUNCTIONS='["_compileLaTeX","_compileBibtex","_compileFormat","_main","_setMainEntry","_malloc","_free","_scanHashTable"]' \
 	-sEXPORTED_RUNTIME_METHODS='["cwrap","FS","UTF8ToString","stringToUTF8","lengthBytesUTF8","HEAPU8"]' \
 	-sINITIAL_MEMORY=268435456 \
 	-sWASM=1 \
@@ -408,6 +409,7 @@ wasm-compile:
 		$(PDFTEX_CXX_SOURCES) \
 		$(WASM_ENTRY) \
 		$(KPSE_HOOK) \
+		$(TRACE_HOOK) \
 		$$(find $(BUILD_WASM) -name 'libkpathsea.a' | head -1) \
 		$$(find $(BUILD_WASM) -name 'libz.a' | head -1) \
 		$$(find $(BUILD_WASM) -name 'libpng.a' | head -1) \

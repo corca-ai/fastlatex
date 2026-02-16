@@ -700,13 +700,25 @@ function compileLaTeXRoutine() {
             }
         }
 
+        // Semantic Trace: extract defined commands from pdfTeX hash table
+        var engineCommands = null;
+        try {
+            _scanHashTable();
+            var cmdData = FS.readFile(WORKROOT + "/.commands", { encoding: "utf8" });
+            if (cmdData && cmdData.length > 0) {
+                engineCommands = cmdData.trimEnd().split("\n");
+            }
+            try { FS.unlink(WORKROOT + "/.commands"); } catch(e2) {}
+        } catch(e) {}
+
         var response = {
             "result": "ok",
             "status": status,
             "log": self.memlog,
             "pdf": pdfArrayBuffer.buffer,
             "cmd": "compile",
-            "preambleSnapshot": usedPreamble
+            "preambleSnapshot": usedPreamble,
+            "engineCommands": engineCommands
         };
 
         var transferables = [pdfArrayBuffer.buffer];

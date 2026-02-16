@@ -23,6 +23,7 @@ interface WorkerMessage {
   format?: ArrayBuffer
   data?: string
   preambleSnapshot?: boolean
+  engineCommands?: string[]
   [key: string]: unknown
 }
 
@@ -244,7 +245,19 @@ export class SwiftLatexEngine implements TexEngine {
     const errors = parseTexErrors(log)
     const preambleSnapshot = !!data.preambleSnapshot
 
-    return { success, pdf, log, errors, compileTime, synctex, preambleSnapshot }
+    const result: CompileResult = {
+      success,
+      pdf,
+      log,
+      errors,
+      compileTime,
+      synctex,
+      preambleSnapshot,
+    }
+    if (data.engineCommands) {
+      result.engineCommands = data.engineCommands
+    }
+    return result
   }
 
   async readFile(path: string): Promise<string | null> {

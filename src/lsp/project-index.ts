@@ -15,6 +15,7 @@ export class ProjectIndex {
   private files = new Map<string, FileSymbols>()
   private auxData: AuxData = { labels: new Map(), citations: new Set() }
   private bibEntries: BibEntry[] = []
+  private engineCommands = new Set<string>()
 
   updateFile(filePath: string, content: string): void {
     this.files.set(filePath, parseLatexFile(content, filePath))
@@ -92,6 +93,14 @@ export class ProjectIndex {
       }
     }
     return undefined
+  }
+
+  updateEngineCommands(commands: string[]): void {
+    this.engineCommands = new Set(commands)
+  }
+
+  getEngineCommands(): ReadonlySet<string> {
+    return this.engineCommands
   }
 
   /** Find the CommandDef for a given command name */

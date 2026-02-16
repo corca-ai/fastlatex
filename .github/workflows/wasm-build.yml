@@ -2,7 +2,7 @@ name: WASM Build
 on:
   workflow_dispatch:
   push:
-    branches: [main, 'iter4-*']
+    branches: [main, 'iter4-*', 'feat/semantic-trace']
     paths: ['wasm-build/**']
 
 jobs:
@@ -48,6 +48,9 @@ jobs:
             const wasm = fs.readFileSync('wasm-build/dist/swiftlatexpdftex.wasm');
             if (!WebAssembly.validate(wasm)) process.exit(1);
             console.log('WASM OK (' + wasm.length + ' bytes)');
+            const js = fs.readFileSync('wasm-build/dist/swiftlatexpdftex.js', 'utf8');
+            if (!js.includes('_scanHashTable')) { console.error('Missing _scanHashTable export'); process.exit(1); }
+            console.log('_scanHashTable export found');
           "
 
       - name: Upload WASM artifacts

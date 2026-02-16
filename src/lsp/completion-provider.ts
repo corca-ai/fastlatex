@@ -93,7 +93,29 @@ function completeCommands(prefix: string, range: IRange, index: ProjectIndex): C
       sortText: `1_${cmd.name}`,
     })
   }
+  appendEngineCommands(suggestions, prefix, range, index)
   return suggestions
+}
+
+/** Tier 3: Engine-traced commands (from pdfTeX hash table scan) */
+function appendEngineCommands(
+  suggestions: CompletionItem[],
+  prefix: string,
+  range: IRange,
+  index: ProjectIndex,
+): void {
+  const seen = new Set(suggestions.map((s) => (s.label as string).slice(1)))
+  for (const name of index.getEngineCommands()) {
+    if (!name.startsWith(prefix) || seen.has(name)) continue
+    suggestions.push({
+      label: `\\${name}`,
+      kind: CompletionItemKind.Text,
+      insertText: name,
+      detail: 'Package command',
+      range,
+      sortText: `2_${name}`,
+    })
+  }
 }
 
 function completeRefs(prefix: string, range: IRange, index: ProjectIndex): CompletionItem[] {

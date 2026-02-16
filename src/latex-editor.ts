@@ -430,6 +430,10 @@ export class LatexEditor {
 
     const detail = result.preambleSnapshot ? '(cached preamble)' : undefined
 
+    if (result.engineCommands?.length) {
+      this.projectIndex.updateEngineCommands(result.engineCommands)
+    }
+
     if (result.success && result.pdf) {
       for (const path of this.fs.listFiles()) {
         const file = this.fs.getFile(path)

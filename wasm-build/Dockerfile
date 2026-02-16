@@ -115,6 +115,7 @@ COPY worker-template.js /src/worker-template.js
 COPY wasm-entry.c /src/wasm-entry.c
 COPY kpse-hook.c /src/kpse-hook.c
 COPY library.js /src/library.js
+COPY trace-hook.c /src/trace-hook.c
 
 RUN chmod +x /src/build.sh
 

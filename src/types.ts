@@ -9,6 +9,8 @@ export interface CompileResult {
   synctex: Uint8Array | null
   /** Whether a cached preamble format was used for this compilation */
   preambleSnapshot?: boolean
+  /** Control sequences from pdfTeX hash table (package + user commands) */
+  engineCommands?: string[]
 }
 
 export interface TexError {
