@@ -194,6 +194,22 @@ describe('ProjectIndex', () => {
     expect(index.getEngineEnvironments().has('align')).toBe(false)
   })
 
+  it('merges arg count from robust command inner macro (trailing space)', () => {
+    const index = new ProjectIndex()
+    // \frac is a 0-arg wrapper, \frac  (with space) is the real 2-arg macro
+    index.updateEngineCommands([
+      'frac\t111\t0',
+      'frac \t112\t2',
+      'textbf\t111\t0',
+      'textbf \t112\t1',
+      'par\t111\t0', // genuinely 0-arg, no inner macro
+    ])
+    const cmds = index.getEngineCommands()
+    expect(cmds.get('frac')!.argCount).toBe(2)
+    expect(cmds.get('textbf')!.argCount).toBe(1)
+    expect(cmds.get('par')!.argCount).toBe(0) // stays 0, no space variant
+  })
+
   it('filters LaTeX3 internal names containing _ or :', () => {
     const index = new ProjectIndex()
     index.updateEngineCommands([

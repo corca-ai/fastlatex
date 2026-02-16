@@ -168,6 +168,17 @@ export class ProjectIndex {
       this.engineCommands.set(info.name, info)
       names.add(info.name)
     }
+    // LaTeX's \DeclareRobustCommand creates a 0-arg wrapper "\foo" that
+    // calls an inner "\foo " (trailing space) which has the real args.
+    // Merge arg counts from "name " entries into "name" entries.
+    for (const [name, info] of this.engineCommands) {
+      if (!name.endsWith(' ') || info.argCount <= 0) continue
+      const baseName = name.trimEnd()
+      const baseInfo = this.engineCommands.get(baseName)
+      if (baseInfo && baseInfo.argCount <= 0) {
+        baseInfo.argCount = info.argCount
+      }
+    }
     this.engineEnvironments = detectEnvironments(names)
   }
 
