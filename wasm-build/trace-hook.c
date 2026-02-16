@@ -96,6 +96,29 @@ extern integer memmax;           /* highest valid zmem index (typically 6999999)
  *   cmd 13 = match (parameter #N), cmd 14 = end_match (body starts)
  *
  * Returns: 0-9 = argument count, -1 = not a macro or error */
+/* Debug: dump first N tokens of a macro's parameter list to a trace file.
+ * Only enabled for macros whose name starts with a specific prefix. */
+static void debug_dump_tokens(int equiv, const char *name)
+{
+    if (equiv < memmin || equiv > memmax) return;
+    FILE *df = fopen("/work/.trace-debug", "a");
+    if (!df) return;
+
+    int q = zmem[equiv].hh.v.RH;
+    fprintf(df, "MACRO %s equiv=%d link=%d\n", name, equiv, q);
+    for (int i = 0; i < 10 && q != 0; i++) {
+        if (q < memmin || q > memmax) {
+            fprintf(df, "  [%d] q=%d OOB\n", i, q);
+            break;
+        }
+        int info = zmem[q].hh.v.LH;
+        fprintf(df, "  [%d] q=%d info=%d (/%d=%d %%%d=%d)\n",
+                i, q, info, 256, info/256, 256, info%256);
+        q = zmem[q].hh.v.RH;
+    }
+    fclose(df);
+}
+
 static int count_macro_args(int eqType, int equiv)
 {
     if (eqType < 111 || eqType > 118) return -1;
@@ -171,7 +194,13 @@ void scanHashTable(void)
         buf[len] = '\0';
 
         int eqType = (int)zeqtb[p].hh.u.B0;
-        int argCount = count_macro_args(eqType, zeqtb[p].hh.v.RH);
+        int equiv = zeqtb[p].hh.v.RH;
+        /* Debug: dump token details for a few known macros */
+        if ((buf[0]=='f' && buf[1]=='r' && buf[2]=='a' && buf[3]=='c' && buf[4]=='\0') ||
+            (buf[0]=='s' && buf[1]=='q' && buf[2]=='r' && buf[3]=='t' && buf[4]=='\0') ||
+            (buf[0]=='t' && buf[1]=='e' && buf[2]=='x' && buf[3]=='t' && buf[4]=='b' && buf[5]=='f' && buf[6]=='\0'))
+            debug_dump_tokens(equiv, buf);
+        int argCount = count_macro_args(eqType, equiv);
         fprintf(f, "%s\t%d\t%d\n", buf, eqType, argCount);
     }
 

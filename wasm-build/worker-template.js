@@ -674,6 +674,12 @@ function compileLaTeXRoutine() {
             engineCommands = cmdData.trimEnd().split("\n");
         }
         try { FS.unlink(WORKROOT + "/.commands"); } catch(e2) {}
+        // Debug: dump trace file for token inspection
+        try {
+            var traceData = FS.readFile(WORKROOT + "/.trace-debug", { encoding: "utf8" });
+            if (traceData) console.log("[TRACE-DEBUG]\n" + traceData);
+            FS.unlink(WORKROOT + "/.trace-debug");
+        } catch(e2) {}
     } catch(e) {}
 
     // pdfTeX exit code 0 = success, 1 = completed with warnings/errors.
