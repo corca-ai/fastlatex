@@ -39,6 +39,7 @@ const SECTION_RE = new RegExp(`\\\\(${SECTION_CMDS})\\*?\\{`, 'g')
 const NEWCOMMAND_RE = new RegExp(`\\\\(?:${NEWCMD_CMDS})\\*?\\{\\\\(\\w+)\\}(?:\\[(\\d+)\\])?`, 'g')
 const DEF_RE = /\\def\\(\w+)/g
 const DECLARE_MATH_RE = /\\DeclareMathOperator\*?\{\\(\w+)\}/g
+const BIBITEM_RE = /\\bibitem(?:\[.*?\])?\{/g
 const BEGIN_RE = /\\begin\{/g
 const INPUT_RE = new RegExp(`\\\\(${INPUT_CMDS})\\{`, 'g')
 const USEPACKAGE_RE = new RegExp(`\\\\(?:${USEPACKAGE_CMDS})(?:\\[(.*?)\\])?\\{`, 'g')
@@ -149,6 +150,20 @@ function extractDeclareMath(
   }
 }
 
+function extractBibItems(
+  line: string,
+  filePath: string,
+  lineNum: number,
+  symbols: FileSymbols,
+): void {
+  for (const m of line.matchAll(BIBITEM_RE)) {
+    const key = extractBraceContent(line, m.index + m[0].length - 1)
+    if (key) {
+      symbols.bibItems.push({ key, location: loc(filePath, lineNum, m.index + 1) })
+    }
+  }
+}
+
 function extractEnvironments(
   line: string,
   filePath: string,
@@ -227,6 +242,7 @@ export function parseLatexFile(content: string, filePath: string): FileSymbols {
     environments: [],
     includes: [],
     packages: [],
+    bibItems: [],
   }
 
   const lines = content.split('\n')
@@ -243,6 +259,7 @@ export function parseLatexFile(content: string, filePath: string): FileSymbols {
     extractNewCommands(line, filePath, lineNum, symbols)
     extractDefs(line, filePath, lineNum, symbols)
     extractDeclareMath(line, filePath, lineNum, symbols)
+    extractBibItems(line, filePath, lineNum, symbols)
     extractEnvironments(line, filePath, lineNum, symbols)
     extractIncludes(line, filePath, lineNum, symbols)
     extractPackages(line, filePath, lineNum, symbols)

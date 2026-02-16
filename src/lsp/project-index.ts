@@ -3,6 +3,7 @@ import { parseLatexFile } from './latex-parser'
 import type {
   AuxData,
   BibEntry,
+  BibitemDef,
   CitationRef,
   CommandDef,
   FileSymbols,
@@ -168,6 +169,16 @@ export class ProjectIndex {
 
   getLoadedPackages(): ReadonlyMap<string, string> {
     return this.loadedPackages
+  }
+
+  /** Find the BibitemDef for a given citation key */
+  findBibitemDef(key: string): BibitemDef | undefined {
+    for (const symbols of this.files.values()) {
+      for (const item of symbols.bibItems) {
+        if (item.key === key) return item
+      }
+    }
+    return undefined
   }
 
   /** Find the CommandDef for a given command name */

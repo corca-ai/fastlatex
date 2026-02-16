@@ -65,11 +65,17 @@ export interface FileSymbols {
   environments: EnvironmentUse[]
   includes: IncludeDef[]
   packages: PackageRef[]
+  bibItems: BibitemDef[]
 }
 
 export interface AuxData {
   labels: Map<string, string>
   citations: Set<string>
+}
+
+export interface BibitemDef {
+  key: string
+  location: SourceLocation
 }
 
 export interface BibEntry {

@@ -43,7 +43,10 @@ function getTokenInBraces(line: string, col: number): { command: string; arg: st
   return { command: cmdMatch[1]!, arg: line.slice(braceStart + 1, braceEnd) }
 }
 
-const ARG_CMD_RE = new RegExp(`^(?:${REF_CMDS}|cite|citep|citet|parencite|textcite|${INPUT_CMDS})$`)
+const CITE_CMD_RE = /^(?:cite|citep|citet|parencite|textcite|autocite|nocite)$/
+const ARG_CMD_RE = new RegExp(
+  `^(?:${REF_CMDS}|cite|citep|citet|parencite|textcite|autocite|nocite|${INPUT_CMDS})$`,
+)
 
 /** Try to find a \command token where the cursor is on the command word */
 function getTokenOnCommand(line: string, col: number): Token | null {
@@ -85,6 +88,13 @@ function handleArgToken(
   if (REF_CMD_RE.test(command)) {
     const label = index.findLabelDef(arg)
     if (label) return sourceLocationToMonaco(label.location)
+    return null
+  }
+
+  // \cite{key} -> jump to \bibitem{key}
+  if (CITE_CMD_RE.test(command)) {
+    const bibitem = index.findBibitemDef(arg)
+    if (bibitem) return sourceLocationToMonaco(bibitem.location)
     return null
   }
 

@@ -277,6 +277,29 @@ describe('parseLatexFile', () => {
     })
   })
 
+  // --- Bib items ---
+  describe('bib items', () => {
+    it('extracts \\bibitem{key}', () => {
+      const result = parseLatexFile('\\bibitem{knuth84} Donald Knuth.', 'refs.tex')
+      expect(result.bibItems).toHaveLength(1)
+      expect(result.bibItems[0]!.key).toBe('knuth84')
+      expect(result.bibItems[0]!.location).toEqual({ file: 'refs.tex', line: 1, column: 1 })
+    })
+
+    it('extracts \\bibitem with optional arg', () => {
+      const result = parseLatexFile('\\bibitem[Knuth, 1984]{knuth84} The TeXbook.', 'refs.tex')
+      expect(result.bibItems).toHaveLength(1)
+      expect(result.bibItems[0]!.key).toBe('knuth84')
+    })
+
+    it('extracts multiple bibitems', () => {
+      const result = parseLatexFile('\\bibitem{a} A.\n\\bibitem{b} B.', 'refs.tex')
+      expect(result.bibItems).toHaveLength(2)
+      expect(result.bibItems[0]!.key).toBe('a')
+      expect(result.bibItems[1]!.key).toBe('b')
+    })
+  })
+
   // --- Edge cases ---
   describe('edge cases', () => {
     it('handles empty content', () => {

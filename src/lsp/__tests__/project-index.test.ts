@@ -118,6 +118,19 @@ describe('ProjectIndex', () => {
     expect(def!.argCount).toBe(1)
   })
 
+  it('findBibitemDef returns the definition', () => {
+    const index = new ProjectIndex()
+    index.updateFile('refs.tex', '\\bibitem{knuth84} The TeXbook.')
+    const def = index.findBibitemDef('knuth84')
+    expect(def).toBeDefined()
+    expect(def!.location.file).toBe('refs.tex')
+  })
+
+  it('findBibitemDef returns undefined for missing key', () => {
+    const index = new ProjectIndex()
+    expect(index.findBibitemDef('nope')).toBeUndefined()
+  })
+
   it('bib entries can be set and retrieved', () => {
     const index = new ProjectIndex()
     index.updateBib([{ key: 'knuth84', type: 'book', title: 'TeXbook', author: 'Knuth' }])
