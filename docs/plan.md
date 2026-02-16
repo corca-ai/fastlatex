@@ -101,9 +101,10 @@ I0에서 Tectonic(Rust, XeTeX 기반)과 SwiftLaTeX pdfTeX WASM을 비교 평가
 * 장기적으로 WebGPU 렌더러의 입력 데이터로 사용
 * 효과: PDF.js 파싱/렌더 단계를 우회하여 즉시 화면 반영
 
-#### (4) Semantic Trace — 부분 완료 (I5a 정적 LSP, I5b 트레이스 예정)
+#### (4) Semantic Trace — Phase 1 완료 (I5a 정적 LSP + I5b 해시 테이블 스캔)
 
-* 매크로 확장 시점에 구조화 이벤트 emit (label, ref, cite, section, include)
+* **Phase 1 완료**: pdfTeX 해시 테이블 스캔 — 컴파일 후 WASM 힙에서 모든 정의된 제어 시퀀스 추출 → LSP Tier 3 자동완성
+* Phase 2 예정: 매크로 확장 시점에 구조화 이벤트 emit (label, ref, cite, section, include)
 * C 레벨 훅 또는 TeX 매크로 레벨 모두 가능
 * LSP의 "진실"을 정적 파서가 아닌 엔진 실행 트레이스로 구성
 * 효과: Overleaf+일반 에디터 조합을 넘어서는 정확한 자동완성/진단
@@ -605,8 +606,61 @@ cp dist/swiftlatexpdftex.{js,wasm} ../public/swiftlatex/
 | Hover 문서 | ✅ 정적 DB | 높음 |
 | Document outline | ✅ 심볼 프로바이더 | 높음 |
 | Find references | ✅ 프로젝트 인덱스 | 높음 |
-| 매크로 확장 추적 | ❌ 미구현 (I5b) | — |
-| 사용자 정의 명령어 완성 | ❌ 미구현 (I5b) | — |
+| 패키지 명령어 자동완성 | ✅ 엔진 해시 테이블 스캔 (I5b) | 높음 |
+| 매크로 확장 추적 | ❌ 미구현 (I5b Phase 2) | — |
+
+---
+
+## Iteration 5b — Semantic Trace Phase 1 (해시 테이블 스캔) ✅
+
+**사용자 가치:** 패키지 명령어도 자동완성 — `\usepackage{amsmath}` 후 `\inter` 입력 시 `\intertext` 등 모든 정의된 명령어 제안
+
+**접근법:** pdfTeX 컴파일 후 WASM 힙에 남아 있는 해시 테이블을 스캔하여 모든 정의된 제어 시퀀스를 추출. C 함수 → MEMFS 파일 → Worker JS → TypeScript LSP로 전달.
+
+<details><summary>A. C 해시 테이블 스캐너</summary>
+
+- [x] `wasm-build/trace-hook.c`: `scanHashTable()` — pdfTeX `hash[514..hashtop]` 순회
+  - web2c wasm32 레이아웃 독립 타입 정의 (pdftexd.h include chain 회피)
+  - 필터: 빈 슬롯, undefined CS (`zeqtb[p].hh.u.B0 == 0`), 1문자, `@` 포함, 200자 초과
+  - 결과를 `/work/.commands`에 newline-delimited로 출력
+- [x] `wasm-build/Makefile`: `TRACE_HOOK`, `_scanHashTable` export, 소스 파일 추가
+- [x] `wasm-build/Dockerfile`: `COPY trace-hook.c /src/trace-hook.c`
+
+</details>
+
+<details><summary>B. Worker 통합</summary>
+
+- [x] `wasm-build/worker-template.js`: `_scanHashTable()` 호출 → MEMFS 읽기 → `engineCommands` 배열로 응답
+- [x] `public/swiftlatex/swiftlatexpdftex.js`: 동일 변경 (try/catch로 WASM 미빌드 시 graceful 처리)
+- [x] 타이밍: `restoreHeapMemory()` 전 실행 → 컴파일 후 힙 상태 온전
+
+</details>
+
+<details><summary>C. TypeScript LSP 통합</summary>
+
+- [x] `src/types.ts`: `CompileResult.engineCommands?: string[]`
+- [x] `src/engine/swiftlatex-engine.ts`: Worker 응답에서 `engineCommands` 추출
+- [x] `src/lsp/project-index.ts`: `updateEngineCommands()` / `getEngineCommands()`
+- [x] `src/lsp/completion-provider.ts`: Tier 3 `appendEngineCommands()` — 중복 제거 + `sortText: '2_'`
+- [x] `src/latex-editor.ts`: 컴파일 결과에서 `engineCommands` → `projectIndex` 전달
+
+</details>
+
+<details><summary>D. CI/빌드</summary>
+
+- [x] `.github/workflows/wasm-build.yml`: `feat/semantic-trace` 브랜치 트리거 + `_scanHashTable` 스모크 테스트
+- [x] GitHub Actions에서 WASM 빌드 성공 (4m28s, native amd64)
+- [x] 빌드된 바이너리를 `public/swiftlatex/`에 반영
+
+</details>
+
+### 3-tier 자동완성 구조
+
+| Tier | 소스 | sortText | Kind |
+|------|------|----------|------|
+| 0 | 정적 DB (~150 명령어) | `0_` | Function |
+| 1 | 사용자 정의 (`\newcommand` regex) | `1_` | Variable |
+| 2 | 엔진 해시 테이블 (패키지 명령어) | `2_` | Text |
 
 ---
 
@@ -646,19 +700,18 @@ cp dist/swiftlatexpdftex.{js,wasm} ../public/swiftlatex/
 
 # Part III. 로드맵 (미구현)
 
-## Iteration 5b — Semantic Trace (엔진 트레이스 기반 LSP 강화)
+## Iteration 5b Phase 2 — Semantic Trace (매크로 확장 트레이스)
 
-**사용자 가치:** "사용자 정의 명령어도 자동완성, 매크로 확장도 추적"
+**사용자 가치:** "매크로 확장도 추적, 엔진 기반 정밀 진단"
 
-**선행 완료:** I5a에서 정적 LSP 구현 완료.
-나머지는 pdfTeX C 코드에 semantic trace 훅을 추가하여 정적 분석의 한계를 넘는 것.
+**선행 완료:** Phase 1 (I5b, 해시 테이블 스캔) → 패키지 명령어 자동완성.
+나머지는 pdfTeX C 코드에 semantic trace 훅을 추가하여 매크로 확장을 실시간 추적:
 
-* 엔진 트레이스: 매크로 확장 시점에 구조화 이벤트 emit (label, ref, cite, section, include, newcommand)
-* `\newcommand`/`\renewcommand` 정의를 트레이스에서 추출 → 자동완성에 반영
+* 매크로 확장 시점에 구조화 이벤트 emit (label, ref, cite, section, include, newcommand)
 * 정적 파서가 아닌 엔진 실행 트레이스 기반 → LaTeX 특유의 매크로 확장도 정확하게 추적
 * WASM 빌드 파이프라인(`wasm-build/`) 활용
 
-**KPI:** 사용자 정의 명령어 자동완성 동작, 매크로 확장 결과 기반 진단
+**KPI:** 매크로 확장 결과 기반 진단, 엔진 트레이스가 LSP "진실 소스"로 승격
 
 ---
 
@@ -750,15 +803,17 @@ pdfTeX `ship_out()`에 PDL 출력 드라이버 추가. WebGPU로 PDL 렌더.
 | I4b | 컴포넌트 API + 라이브러리 빌드 | ✅ |
 | I4c | 컴파일 흐름 수정 + WASM 버그 수정 | ✅ |
 | I5a | 정적 LaTeX LSP (completion, go-to-def, hover, symbols, refs) | ✅ |
+| I5b | Semantic Trace Phase 1 (해시 테이블 스캔 → 패키지 명령어 자동완성) | ✅ |
 | I5c | 정적 번들 최적화 (hyph 제거, pdftex.map gzip preload, onmessage 리팩터) | ✅ |
 
 ## 코드베이스 현황
 
 | 지표 | 수치 |
 |------|------|
-| TypeScript 소스 | 45 파일, ~5,600줄 (프로덕션) |
+| TypeScript 소스 | 34 파일, ~5,800줄 (프로덕션) |
 | 단위 테스트 | 10 파일, ~2,100줄 |
 | E2E 테스트 | 8 스펙, ~1,070줄 |
+| WASM 빌드 | 7 파일 (Dockerfile, Makefile, build.sh, worker-template.js, wasm-entry.c, kpse-hook.c, trace-hook.c) |
 | 런타임 의존성 | 2개 (monaco-editor, pdfjs-dist) |
 | 정적 자산 | WASM 1.6MB + worker 137KB + .fmt 2.3MB + texlive 8.7MB ≈ 13MB (raw), ~4MB (gzip transfer) |
 | 배포 | https://akcorca.github.io/latex-editor/ |
@@ -767,14 +822,15 @@ pdfTeX `ship_out()`에 PDL 출력 드라이버 추가. WebGPU로 PDL 렌더.
 
 ### ~~Option A: 정적 번들 최적화~~ → ✅ 완료 (I5c)
 
-### Option B: Semantic Trace + LSP 정확도 (I5b, 수주)
+### ~~Option B-1: 해시 테이블 스캔~~ → ✅ 완료 (I5b Phase 1)
 
-정적 LSP로 커버 못 하는 부분 — 엔진 실행 트레이스 기반:
+### Option B-2: Semantic Trace Phase 2 (매크로 확장 트레이스)
 
-1. pdfTeX C 코드에 semantic trace 훅 (매크로 확장 시 이벤트 emit)
-2. 사용자 정의 `\newcommand` 자동완성
-3. 매크로 확장 결과 기반 정확한 진단
-4. 엔진 트레이스 → LSP "진실 소스" 업그레이드
+해시 테이블 스캔으로 패키지 명령어는 커버됨. 남은 부분:
+
+1. pdfTeX C 코드에 매크로 확장 시점 훅 (label, ref, cite, section, include 이벤트)
+2. 매크로 확장 결과 기반 정확한 진단
+3. 엔진 트레이스 → LSP "진실 소스" 승격
 
 ### Option C: PDL + LiveView (I6, 대형)
 
