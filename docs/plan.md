@@ -105,7 +105,7 @@ I0에서 Tectonic(Rust, XeTeX 기반)과 SwiftLaTeX pdfTeX WASM을 비교 평가
 
 * **Phase 1 완료**: pdfTeX 해시 테이블 스캔 — 컴파일 후 WASM 힙에서 모든 정의된 제어 시퀀스 추출 → LSP Tier 3 자동완성
 * **Phase 2 완료**: eq_type 기반 명령어 분류 (macro/primitive/unknown), `endXXX→XXX` 환경 감지, 컴파일 로그에서 패키지 버전 파싱, hover 정보 추가
-* **Phase 3 완료**: 매크로 인수 개수 추출 (토큰 리스트 워킹) → 스니펫 자동완성 (`\frac{$1}{$2}`), hover에 인수 정보 표시
+* **Phase 3 완료**: 매크로 인수 개수 추출 (토큰 리스트 워킹, `\DeclareRobustCommand` 내부 매크로 병합) → 스니펫 자동완성 (`\frac{$1}{$2}`), hover에 인수 정보 표시
 * C 레벨 훅 또는 TeX 매크로 레벨 모두 가능
 * LSP의 "진실"을 정적 파서가 아닌 엔진 실행 트레이스로 구성
 * 효과: Overleaf+일반 에디터 조합을 넘어서는 정확한 자동완성/진단
@@ -983,7 +983,7 @@ pdfTeX `ship_out()`에 PDL 출력 드라이버 추가. WebGPU로 PDL 렌더.
 | 지표 | 수치 |
 |------|------|
 | TypeScript 소스 | 36 파일, ~6,200줄 (프로덕션) |
-| 단위 테스트 | 12 파일, 208 tests |
+| 단위 테스트 | 12 파일, 211 tests |
 | E2E 테스트 | 8 스펙, ~1,070줄 |
 | WASM 빌드 | 7 파일 (Dockerfile, Makefile, build.sh, worker-template.js, wasm-entry.c, kpse-hook.c, trace-hook.c) |
 | 런타임 의존성 | 2개 (monaco-editor, pdfjs-dist) |
