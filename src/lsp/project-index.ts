@@ -20,6 +20,10 @@ export interface EngineCommandInfo {
 /** Suffixes that match `end<X>` but are NOT real environments */
 const ENV_BLOCKLIST = new Set(['csname', 'group', 'input', 'linechar', 'write'])
 
+/** LaTeX3 (expl3) internal markers — `_` and `:` are only catcode-11
+ *  inside expl3 code. No user-facing command contains them. */
+const L3_INTERNAL_RE = /[_:]/
+
 function classifyEqType(eqType: number): EngineCommandInfo['category'] {
   if (eqType >= 111 && eqType <= 118) return 'macro'
   if (eqType > 0) return 'primitive'
@@ -139,6 +143,7 @@ export class ProjectIndex {
     const names = new Set<string>()
     for (const entry of commands) {
       const info = parseEngineEntry(entry)
+      if (L3_INTERNAL_RE.test(info.name)) continue
       this.engineCommands.set(info.name, info)
       names.add(info.name)
     }

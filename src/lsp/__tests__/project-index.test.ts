@@ -161,6 +161,24 @@ describe('ProjectIndex', () => {
     expect(index.getEngineEnvironments().has('align')).toBe(false)
   })
 
+  it('filters LaTeX3 internal names containing _ or :', () => {
+    const index = new ProjectIndex()
+    index.updateEngineCommands([
+      'intertext\t113',
+      '__fp_sqrt:w\t114',
+      'prop_if_in:NnTF\t114',
+      'hbox\t21',
+      'token_if_space:NTF\t114',
+    ])
+    const cmds = index.getEngineCommands()
+    expect(cmds.has('intertext')).toBe(true)
+    expect(cmds.has('hbox')).toBe(true)
+    expect(cmds.has('__fp_sqrt:w')).toBe(false)
+    expect(cmds.has('prop_if_in:NnTF')).toBe(false)
+    expect(cmds.has('token_if_space:NTF')).toBe(false)
+    expect(cmds.size).toBe(2)
+  })
+
   it('parses package info from log', () => {
     const index = new ProjectIndex()
     index.updateLogData(

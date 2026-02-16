@@ -710,6 +710,19 @@ cp dist/swiftlatexpdftex.{js,wasm} ../public/swiftlatex/
 
 </details>
 
+### 검증 결과
+
+WASM 재빌드 후 확인 (CI run 22049940861):
+- 14,244 commands (eq_type 포함), 77 environments 감지
+- eq_type 분류 정상 동작: `\t103` (primitive), `\t114` (macro) 등
+
+### 해결됨: LaTeX3 내부 명령어 필터링
+
+초기 스캔 결과 14,244개 중 대부분이 L3 내부 (`__fp_sqrt:w`, `prop_if_in:NnTF` 등). `_`와 `:`는 expl3만 catcode 11(letter)로 사용 — 사용자 명령어에는 없음.
+- **TS 측**: `L3_INTERNAL_RE = /[_:]/` 필터 (즉시 적용, 기존 WASM에서도 동작)
+- **C 측**: `trace-hook.c`에 `'_'`, `':'` skip 조건 추가 (WASM 재빌드 후 적용)
+- 결과: 14,244 → ~500-1000 유효 명령어로 축소
+
 ### 하위 호환
 
 | 시나리오 | 동작 |

@@ -114,13 +114,16 @@ void scanHashTable(void)
         /* Skip names longer than 200 chars (sanity bound) */
         if (len > 200) continue;
 
-        /* Check for '@' (internal LaTeX macros) and copy to buffer */
+        /* Check for internal markers and copy to buffer.
+         * '@' = LaTeX2e internals, '_' and ':' = LaTeX3 (expl3) internals.
+         * In standard LaTeX, '_' is subscript (catcode 8) and ':' is other
+         * (catcode 12) — only expl3 makes them letters (catcode 11). */
         char buf[201];
         int skip = 0;
         int i;
         for (i = 0; i < len; i++) {
             unsigned char ch = strpool[start + i];
-            if (ch == '@') { skip = 1; break; }
+            if (ch == '@' || ch == '_' || ch == ':') { skip = 1; break; }
             buf[i] = (char)ch;
         }
         if (skip) continue;
