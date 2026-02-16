@@ -603,15 +603,17 @@ cp dist/swiftlatexpdftex.{js,wasm} ../public/swiftlatex/
 |------|------|--------|
 | 자동완성 (명령어/환경) | ✅ 정적 DB | 높음 (내장 150개 명령어) |
 | 자동완성 (`\ref`/`\cite`) | ✅ `.aux` 파서 기반 | 높음 (컴파일 후 갱신) |
-| Go-to-definition | ✅ 크로스 파일 | 높음 |
+| Go-to-definition | ✅ 크로스 파일 + `\cite`→`\bibitem` (I5c) | 높음 |
 | Hover 문서 | ✅ 정적 DB | 높음 |
-| Document outline | ✅ 심볼 프로바이더 | 높음 |
+| Document outline | ✅ 계층적 섹션 중첩 (I5d) | 높음 |
 | Find references | ✅ 프로젝트 인덱스 | 높음 |
 | 패키지 명령어 자동완성 | ✅ 엔진 해시 테이블 스캔 (I5b) | 높음 |
 | 패키지 환경 자동완성 | ✅ `endXXX→XXX` 패턴 감지 (I5b Phase 2) | 높음 |
 | 명령어 분류 (macro/primitive) | ✅ eq_type 기반 (I5b Phase 2, WASM 재빌드 후 활성) | 높음 |
 | 엔진 명령어/환경 hover | ✅ Package macro / TeX primitive / Package environment | 높음 |
 | 패키지 버전 파싱 | ✅ 컴파일 로그에서 추출 (I5b Phase 2) | 높음 |
+| 정적 진단 (undefined ref/cite, duplicate label) | ✅ 편집+컴파일 시 실행 (I6) | 높음 |
+| 패키지 에러/경고 파싱 | ✅ `Package xxx Error/Warning` (I6) | 높음 |
 | 매크로 확장 추적 | ❌ 미구현 (I5b Phase 3) | — |
 
 ---
@@ -766,6 +768,46 @@ WASM 재빌드 후 확인 (CI run 22049940861):
 
 ---
 
+## Iteration 5c-d — Go-to-definition 강화 + 계층적 Outline ✅
+
+**사용자 가치:** `\cite{key}` Ctrl+클릭 → `\bibitem{key}` 정의로 점프. 문서 outline에서 섹션이 계층적으로 표시 (subsection이 section의 하위로 중첩).
+
+### I5c: `\cite` go-to-definition
+- [x] `src/lsp/latex-parser.ts`: `\bibitem{key}` 파싱 추가
+- [x] `src/lsp/types.ts`: `BibitemDef` 인터페이스 + `FileSymbols.bibItems` 필드
+- [x] `src/lsp/project-index.ts`: `findBibitemDef(key)` 메서드
+- [x] `src/lsp/definition-provider.ts`: `\cite` → `\bibitem` 점프 핸들러
+- [x] 단위 테스트 5개 추가
+
+### I5d: 계층적 섹션 중첩
+- [x] `src/lsp/symbol-provider.ts`: 스택 기반 트리 빌드 (`part > chapter > section > subsection > subsubsection > paragraph`)
+- [x] label, command, environment가 소속 section의 하위로 중첩
+
+---
+
+## Iteration 6 — 정적 진단 + 로그 파서 강화 ✅
+
+**사용자 가치:** 편집 중 undefined reference, 미정의 citation, 중복 label을 실시간으로 경고. 패키지 에러/경고도 정확히 파싱.
+
+### 정적 분석 진단
+- [x] `src/lsp/diagnostic-provider.ts`: `computeDiagnostics()` — 편집마다 + 컴파일 후 실행
+  - Undefined `\ref{name}` (소스 `\label` + `.aux` 미존재)
+  - Undefined `\cite{key}` (`.aux` + `.bib` + `\bibitem` 미존재)
+  - Duplicate `\label{name}` (크로스 파일 감지, 첫 정의 위치 표시)
+- [x] `src/ui/error-markers.ts`: `setDiagnosticMarkers()` — Monaco 마커 (별도 owner `latex-diagnostics`)
+- [x] `src/latex-editor.ts`: `onEditorChange()` + `onCompileResult()`에서 진단 실행
+
+### 로그 파서 강화
+- [x] `src/engine/parse-errors.ts`: 패키지 에러 (`Package xxx Error: ...`) 파싱
+- [x] `src/engine/parse-errors.ts`: 패키지 경고 (`Package xxx Warning: ...`) 파싱
+- [x] 인지 복잡도 해소: `tryTexError`/`tryLatexWarning`/`tryPackageError`/`tryPackageWarning`/`tryBoxWarning` 헬퍼 분리
+
+### 테스트
+- [x] 진단 테스트 10개 (undefined ref/cite, duplicate label, aux/bib/bibitem 해소)
+- [x] 로그 파서 테스트 4개 (패키지 에러/경고 + 라인 번호)
+
+---
+
 # Part III. 로드맵 (미구현)
 
 ## Iteration 5b Phase 3 — Semantic Trace (매크로 확장 트레이스)
@@ -783,7 +825,7 @@ WASM 재빌드 후 확인 (CI run 22049940861):
 
 ---
 
-## Iteration 6 — PDL + LiveView: 즉시 반응
+## Iteration 7 — PDL + LiveView: 즉시 반응
 
 **사용자 가치:** "타이핑하면 50ms 내 페이지가 움직인다"
 
@@ -798,7 +840,7 @@ pdfTeX `ship_out()`에 PDL 출력 드라이버 추가. WebGPU로 PDL 렌더.
 
 ---
 
-## Iteration 7 — 대형 문서 + 안정화
+## Iteration 8 — 대형 문서 + 안정화
 
 **사용자 가치:** "100페이지 논문도 쾌적"
 
@@ -812,7 +854,7 @@ pdfTeX `ship_out()`에 PDL 출력 드라이버 추가. WebGPU로 PDL 렌더.
 
 ---
 
-## Iteration 8 — 서버 fallback + 프로젝트 관리
+## Iteration 9 — 서버 fallback + 프로젝트 관리
 
 **사용자 가치:** "어떤 패키지/문서 크기여도 일단 된다" + 폴더 구조로 실제 프로젝트 관리 가능
 
@@ -833,7 +875,7 @@ pdfTeX `ship_out()`에 PDL 출력 드라이버 추가. WebGPU로 PDL 렌더.
 
 ---
 
-## Iteration 9 — 템플릿 + 패키지 확장
+## Iteration 10 — 템플릿 + 패키지 확장
 
 **사용자 가치:** "학회 템플릿 골라서 바로 시작"
 
@@ -873,14 +915,16 @@ pdfTeX `ship_out()`에 PDL 출력 드라이버 추가. WebGPU로 PDL 렌더.
 | I5a | 정적 LaTeX LSP (completion, go-to-def, hover, symbols, refs) | ✅ |
 | I5b | Semantic Trace Phase 1 (해시 테이블 스캔 → 패키지 명령어 자동완성) | ✅ |
 | I5b-2 | Semantic Trace Phase 2 (환경 감지, 명령어 분류, 로그 파싱, hover) | ✅ |
-| I5c | 정적 번들 최적화 (hyph 제거, pdftex.map gzip preload, onmessage 리팩터) | ✅ |
+| I5c(번들) | 정적 번들 최적화 (hyph 제거, pdftex.map gzip preload, onmessage 리팩터) | ✅ |
+| I5c-d | Go-to-definition 강화 (`\cite`→`\bibitem`) + 계층적 outline | ✅ |
+| I6 | 정적 진단 (undefined ref/cite, duplicate label) + 로그 파서 강화 | ✅ |
 
 ## 코드베이스 현황
 
 | 지표 | 수치 |
 |------|------|
-| TypeScript 소스 | 34 파일, ~5,800줄 (프로덕션) |
-| 단위 테스트 | 10 파일, 179 tests |
+| TypeScript 소스 | 36 파일, ~6,200줄 (프로덕션) |
+| 단위 테스트 | 11 파일, 199 tests |
 | E2E 테스트 | 8 스펙, ~1,070줄 |
 | WASM 빌드 | 7 파일 (Dockerfile, Makefile, build.sh, worker-template.js, wasm-entry.c, kpse-hook.c, trace-hook.c) |
 | 런타임 의존성 | 2개 (monaco-editor, pdfjs-dist) |
@@ -903,7 +947,7 @@ pdfTeX `ship_out()`에 PDL 출력 드라이버 추가. WebGPU로 PDL 렌더.
 2. 매크로 확장 결과 기반 정확한 진단
 3. 엔진 트레이스 → LSP "진실 소스" 승격
 
-### Option C: PDL + LiveView (I6, 대형)
+### Option C: PDL + LiveView (I7, 대형)
 
 가장 야심찬 목표 — 타이핑 30-80ms 내 화면 반응:
 
@@ -911,7 +955,7 @@ pdfTeX `ship_out()`에 PDL 출력 드라이버 추가. WebGPU로 PDL 렌더.
 2. WebGPU 렌더러 (glyph atlas, 타일링)
 3. Interruptible compilation (Asyncify)
 
-### Option D: 서버 fallback + 프로젝트 관리 (I8)
+### Option D: 서버 fallback + 프로젝트 관리 (I9)
 
 실용적 완성도 — 어떤 패키지/문서도 컴파일 가능:
 
