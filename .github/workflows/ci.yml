@@ -22,6 +22,7 @@ jobs:
       - run: npx vite build
         env:
           BASE_URL: /${{ github.event.repository.name }}/
+          VITE_TEXLIVE_URL: https://dwrg2en9emzif.cloudfront.net/
       - uses: actions/upload-pages-artifact@v3
         if: github.ref == 'refs/heads/main'
         with: { path: dist }

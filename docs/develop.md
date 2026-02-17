@@ -41,7 +41,7 @@ npm run dev
 Browser
 ├── Monaco Editor (code editing)
 ├── PDF.js (PDF rendering)
-└── SwiftLaTeX WASM Worker (pdfTeX 1.40.21)
+└── SwiftLaTeX WASM Worker (pdfTeX 1.40.22)
       └── fetches packages from TexLive server
 
 TexLive Server (Docker, port 5001)
@@ -118,21 +118,214 @@ The bottleneck is `libs/icu/` (ICU C++ library, ~200 source files) and `texk/web
 
 The full build may show errors for luajittex (missing `hb.h`) — this is expected and ignored. Only pdfTeX is needed.
 
-## TexLive Server
+## TexLive Package Serving
+
+The WASM worker fetches LaTeX packages on demand during compilation. There are three serving options:
+
+### Option A: Docker texlive server (development)
 
 ```bash
-# Build the image (~5GB, includes texlive-full)
-docker compose build texlive
-
-# Run standalone
-docker compose up texlive
+docker compose build texlive   # ~5GB image, includes texlive-full
+docker compose up texlive      # serves on port 5001
 ```
 
-The server provides `.tfm`, `.sty`, `.cls`, `.fmt` and other TeX resources to the WASM engine at runtime.
+A Flask app uses `libkpathsea` to locate files in the TeX Live installation and serves them over HTTP. This is the simplest setup for development but requires Docker.
+
+### Option B: S3 + CloudFront (production, recommended)
+
+The texlive server has **no computation logic** — it only maps filenames to files via kpathsea and serves them. This can be replaced entirely by static hosting.
+
+**Current deployment:**
+
+| Resource | Value |
+|----------|-------|
+| S3 bucket | `akcorca-texlive` (ap-northeast-2) |
+| CloudFront | `dwrg2en9emzif.cloudfront.net` (distribution `EZLBEEMI7TKVN`) |
+| Files | ~94,000 files, ~320 MB |
+| CORS | `Access-Control-Allow-Origin: *`, exposes `fileid`/`pkid` headers |
+
+To use, set the `texliveUrl` option:
+
+```typescript
+const editor = new LatexEditor({
+  texliveUrl: 'https://dwrg2en9emzif.cloudfront.net/',
+});
+```
+
+#### URL structure
+
+The WASM worker requests files as `{texliveUrl}pdftex/{format}/{filename}`:
+
+| Format | Content | Example |
+|--------|---------|---------|
+| 3 | TFM font metrics (no extension) | `pdftex/3/cmr10` |
+| 10 | Format files | `pdftex/10/swiftlatexpdftex.fmt` |
+| 11 | Font maps | `pdftex/11/pdftex.map` |
+| 26 | TeX sources (.sty, .cls, .def, ...) | `pdftex/26/geometry.sty` |
+| 32 | PostScript fonts (.pfb) | `pdftex/32/cmr10.pfb` |
+| 44 | Encoding files (.enc) | `pdftex/44/cm-super-ts1.enc` |
+
+Missing files must return 404 (not 403). The worker caches both hits and misses in memory.
+
+#### Rebuilding the S3 content
+
+To extract files from the Docker texlive image and upload to S3:
+
+```bash
+# 1. Start the texlive container
+docker compose up -d texlive
+
+# 2. Extract files into flat structure inside the container
+docker exec latex-texlive-1 bash -c '
+mkdir -p /tmp/texlive-s3/pdftex/{3,10,11,26,32,44}
+
+# Type 26: TeX sources (latex/ takes priority over latex-dev/)
+for dir in \
+    /usr/share/texlive/texmf-dist/tex/latex \
+    /usr/share/texlive/texmf-dist/tex/generic \
+    /usr/share/texlive/texmf-dist/tex/plain; do
+    [ -d "$dir" ] && find "$dir" -type f | while read f; do
+        bn=$(basename "$f")
+        dst="/tmp/texlive-s3/pdftex/26/$bn"
+        [ ! -f "$dst" ] && cp "$f" "$dst"
+    done
+done
+
+# Type 3: TFM fonts (strip .tfm extension)
+find /usr/share/texlive/texmf-dist/fonts/tfm -name "*.tfm" | while read f; do
+    bn=$(basename "$f" .tfm)
+    dst="/tmp/texlive-s3/pdftex/3/$bn"
+    [ ! -f "$dst" ] && cp "$f" "$dst"
+done
+
+# Type 32: PostScript fonts
+find /usr/share/texlive/texmf-dist/fonts/type1 -name "*.pfb" | while read f; do
+    bn=$(basename "$f")
+    dst="/tmp/texlive-s3/pdftex/32/$bn"
+    [ ! -f "$dst" ] && cp "$f" "$dst"
+done
+
+# Type 11: Font maps
+find /usr/share/texlive/texmf-dist/fonts/map -name "*.map" | while read f; do
+    bn=$(basename "$f")
+    dst="/tmp/texlive-s3/pdftex/11/$bn"
+    [ ! -f "$dst" ] && cp "$f" "$dst"
+done
+
+# Type 44: Encoding files
+find /usr/share/texlive/texmf-dist/fonts/enc -name "*.enc" | while read f; do
+    bn=$(basename "$f")
+    dst="/tmp/texlive-s3/pdftex/44/$bn"
+    [ ! -f "$dst" ] && cp "$f" "$dst"
+done
+'
+
+# 3. Copy to local filesystem
+mkdir -p /tmp/texlive-s3
+docker cp latex-texlive-1:/tmp/texlive-s3/pdftex /tmp/texlive-s3/pdftex
+
+# 4. Upload to S3
+aws s3 sync /tmp/texlive-s3/pdftex/ s3://akcorca-texlive/pdftex/
+```
+
+#### Setting up a new S3 + CloudFront deployment from scratch
+
+```bash
+BUCKET=akcorca-texlive
+REGION=ap-northeast-2
+
+# Create bucket
+aws s3 mb s3://$BUCKET --region $REGION
+
+# Allow public access
+aws s3api put-public-access-block --bucket $BUCKET \
+  --public-access-block-configuration \
+  BlockPublicAcls=false,IgnorePublicAcls=false,BlockPublicPolicy=false,RestrictPublicBuckets=false
+
+aws s3api put-bucket-policy --bucket $BUCKET --policy "{
+  \"Version\": \"2012-10-17\",
+  \"Statement\": [{
+    \"Sid\": \"PublicReadGetObject\",
+    \"Effect\": \"Allow\",
+    \"Principal\": \"*\",
+    \"Action\": \"s3:GetObject\",
+    \"Resource\": \"arn:aws:s3:::$BUCKET/*\"
+  }]
+}"
+
+# Enable static website hosting (returns 404 instead of 403 for missing files)
+aws s3 website s3://$BUCKET --index-document index.html
+
+# CORS on S3 (needed for worker XHR)
+aws s3api put-bucket-cors --bucket $BUCKET --cors-configuration '{
+  "CORSRules": [{
+    "AllowedOrigins": ["*"],
+    "AllowedMethods": ["GET"],
+    "AllowedHeaders": ["*"],
+    "ExposeHeaders": ["fileid", "pkid"],
+    "MaxAgeSeconds": 86400
+  }]
+}'
+
+# Create CloudFront CORS response headers policy
+POLICY_ID=$(aws cloudfront create-response-headers-policy --response-headers-policy-config '{
+  "Name": "texlive-cors-policy",
+  "Comment": "CORS for TeX Live static files",
+  "CorsConfig": {
+    "AccessControlAllowOrigins": { "Quantity": 1, "Items": ["*"] },
+    "AccessControlAllowMethods": { "Quantity": 1, "Items": ["GET"] },
+    "AccessControlAllowHeaders": { "Quantity": 1, "Items": ["*"] },
+    "AccessControlExposeHeaders": { "Quantity": 2, "Items": ["fileid", "pkid"] },
+    "AccessControlAllowCredentials": false,
+    "AccessControlMaxAgeSec": 86400,
+    "OriginOverride": true
+  }
+}' --query 'ResponseHeadersPolicy.Id' --output text)
+
+# Create CloudFront distribution
+# Uses S3 website endpoint as custom origin (not S3 origin) for proper 404 handling
+aws cloudfront create-distribution --cli-input-json "{
+  \"DistributionConfig\": {
+    \"CallerReference\": \"$BUCKET-$(date +%s)\",
+    \"Comment\": \"TeX Live static file serving\",
+    \"Enabled\": true,
+    \"Origins\": {
+      \"Quantity\": 1,
+      \"Items\": [{
+        \"Id\": \"S3-Website-$BUCKET\",
+        \"DomainName\": \"$BUCKET.s3-website.$REGION.amazonaws.com\",
+        \"CustomOriginConfig\": {
+          \"HTTPPort\": 80, \"HTTPSPort\": 443,
+          \"OriginProtocolPolicy\": \"http-only\",
+          \"OriginSslProtocols\": { \"Quantity\": 1, \"Items\": [\"TLSv1.2\"] }
+        }
+      }]
+    },
+    \"DefaultCacheBehavior\": {
+      \"TargetOriginId\": \"S3-Website-$BUCKET\",
+      \"ViewerProtocolPolicy\": \"redirect-to-https\",
+      \"ResponseHeadersPolicyId\": \"$POLICY_ID\",
+      \"AllowedMethods\": { \"Quantity\": 2, \"Items\": [\"GET\", \"HEAD\"],
+        \"CachedMethods\": { \"Quantity\": 2, \"Items\": [\"GET\", \"HEAD\"] } },
+      \"ForwardedValues\": { \"QueryString\": false,
+        \"Cookies\": { \"Forward\": \"none\" }, \"Headers\": { \"Quantity\": 0 } },
+      \"Compress\": true,
+      \"MinTTL\": 86400, \"DefaultTTL\": 2592000, \"MaxTTL\": 31536000
+    },
+    \"PriceClass\": \"PriceClass_200\",
+    \"ViewerCertificate\": { \"CloudFrontDefaultCertificate\": true },
+    \"HttpVersion\": \"http2and3\"
+  }
+}"
+```
+
+### Option C: Bundled files only (static hosting, no server)
+
+A minimal set of packages is pre-bundled in `public/texlive/pdftex/` (~10 MB). This covers `article.cls`, `amsmath`, `amssymb`, `amsthm`, and Computer Modern fonts. Documents using only these packages compile without any server.
 
 ### Version constraint
 
-The WASM binary is pdfTeX **1.40.21**. Format files (`.fmt`) must be built by this exact version. The texlive server uses pre-built format files from the Texlive-Ondemand repo — do **not** attempt to rebuild them with the server's pdfTeX (1.40.20), as it will produce incompatible format files ("Fatal format file error; I'm stymied").
+The WASM binary is pdfTeX **1.40.22**. Format files (`.fmt`) must be built by this exact version. The texlive server uses a pre-built `swiftlatexpdftex.fmt` — do **not** use the system `pdflatex.fmt` (built by 1.40.20 on Ubuntu 20.04), as it produces incompatible format files ("Fatal format file error; I'm stymied").
 
 ## Tests
 
@@ -163,8 +356,8 @@ If the texlive server was down and the worker cached 404 responses, the cache pe
 
 ### "Fatal format file error; I'm stymied"
 
-The format file version doesn't match the WASM pdfTeX version (1.40.21). Use the pre-built format file from the texlive server — do not rebuild it locally.
+The format file version doesn't match the WASM pdfTeX version (1.40.22). Use the pre-built format file from the texlive server — do not rebuild it locally.
 
 ### l3backend errors
 
-Newer `l3backend` packages (2023+) require `\__kernel_dependency_version_check:nn` which doesn't exist in the pdfTeX 1.40.21 format. The texlive server ships Ubuntu 20.04's `l3backend-pdfmode.def` (2020-02-03) which has no version check and works fine.
+Newer `l3backend` packages (2023+) require `\__kernel_dependency_version_check:nn` which doesn't exist in the pdfTeX 1.40.22 format. The texlive server ships Ubuntu 20.04's `l3backend-pdfmode.def` (2020-02-03) which has no version check and works fine.

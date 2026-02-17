@@ -77,7 +77,10 @@ export class SwiftLatexEngine {
     // Set TexLive endpoint — proxied through Vite dev server (/texlive/ → texlive:5001)
     // Note: do NOT use PdfTeXEngine's setTexliveEndpoint() — it has a bug
     // that nullifies the worker reference after posting the message
-    const texliveUrl = this.texliveUrl ?? `${location.origin}${import.meta.env.BASE_URL}texlive/`
+    const texliveUrl =
+      this.texliveUrl ??
+      import.meta.env.VITE_TEXLIVE_URL ??
+      `${location.origin}${import.meta.env.BASE_URL}texlive/`
     this.worker!.postMessage({ cmd: 'settexliveurl', url: texliveUrl })
 
     // Pre-load format and pdftex.map in parallel
