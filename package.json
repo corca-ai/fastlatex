@@ -23,8 +23,6 @@
     "format": "biome format --write src/",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint:py": "cd texlive-server && uvx ruff check .",
-    "format:py": "cd texlive-server && uvx ruff format .",
     "test:e2e": "playwright test",
     "download-engine": "bash scripts/download-engine.sh",
     "build:lib": "BUILD_MODE=lib vite build"

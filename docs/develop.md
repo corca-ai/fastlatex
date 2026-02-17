@@ -65,7 +65,7 @@ wasm-build/           # pdfTeX WASM build pipeline (Docker)
 scripts/              # Helper scripts
 e2e/                  # Playwright E2E tests
 docs/                 # Documentation
-texlive-server/       # Docker texlive (S3 extraction only, not needed for dev)
+scripts/              # sync-texlive-s3.sh, download-engine.sh, etc.
 ```
 
 ## Engine Setup
@@ -152,94 +152,22 @@ The worker requests files as `{texliveUrl}pdftex/{format}/{filename}`:
 
 Missing files must return 404 (not 403). The worker caches both hits and misses in memory.
 
-### Docker texlive server (S3 extraction only)
+### Rebuilding the S3 content
 
-The Docker texlive server (`texlive-server/`) is **not needed for development or production**. Its only remaining purpose is as a source for extracting files to upload to S3.
-
-The server has no computation logic — it only maps filenames to files via `libkpathsea` and serves them over HTTP. This is fully replaced by the flat S3 file structure.
-
-<details><summary>Rebuilding the S3 content</summary>
-
-To extract files from the Docker texlive image and upload to S3:
+No Docker required. The script downloads the TeX Live 2020 texmf tarball (~2.9 GB) directly from the CTAN historic archive, extracts files into a flat structure, and uploads to S3.
 
 ```bash
-# 1. Start the texlive container
-docker compose up -d texlive
+# Extract only (inspect before uploading)
+./scripts/sync-texlive-s3.sh
 
-# 2. Extract files into flat structure inside the container
-docker exec latex-texlive-1 bash -c '
-mkdir -p /tmp/texlive-s3/pdftex/{3,10,11,26,32,33,44}
+# Extract + upload to S3
+./scripts/sync-texlive-s3.sh --upload
 
-# Both texmf trees contain files — search both (texmf-dist first, texmf second)
-TEXMF_DIRS="/usr/share/texlive/texmf-dist /usr/share/texmf"
-
-# Type 26: TeX sources (latex/ takes priority over latex-dev/)
-for dir in \
-    /usr/share/texlive/texmf-dist/tex/latex \
-    /usr/share/texlive/texmf-dist/tex/generic \
-    /usr/share/texlive/texmf-dist/tex/plain; do
-    [ -d "$dir" ] && find "$dir" -type f | while read f; do
-        bn=$(basename "$f")
-        dst="/tmp/texlive-s3/pdftex/26/$bn"
-        [ ! -f "$dst" ] && cp "$f" "$dst"
-    done
-done
-
-# Type 3: TFM fonts (strip .tfm extension)
-for base in $TEXMF_DIRS; do
-    [ -d "$base/fonts/tfm" ] && find "$base/fonts/tfm" -name "*.tfm" | while read f; do
-        bn=$(basename "$f" .tfm)
-        dst="/tmp/texlive-s3/pdftex/3/$bn"
-        [ ! -f "$dst" ] && cp "$f" "$dst"
-    done
-done
-
-# Type 32: PostScript fonts
-for base in $TEXMF_DIRS; do
-    [ -d "$base/fonts/type1" ] && find "$base/fonts/type1" -name "*.pfb" | while read f; do
-        bn=$(basename "$f")
-        dst="/tmp/texlive-s3/pdftex/32/$bn"
-        [ ! -f "$dst" ] && cp "$f" "$dst"
-    done
-done
-
-# Type 33: Virtual fonts (strip .vf extension)
-for base in $TEXMF_DIRS; do
-    [ -d "$base/fonts/vf" ] && find "$base/fonts/vf" -name "*.vf" | while read f; do
-        bn=$(basename "$f" .vf)
-        dst="/tmp/texlive-s3/pdftex/33/$bn"
-        [ ! -f "$dst" ] && cp "$f" "$dst"
-    done
-done
-
-# Type 11: Font maps
-for base in $TEXMF_DIRS; do
-    [ -d "$base/fonts/map" ] && find "$base/fonts/map" -name "*.map" | while read f; do
-        bn=$(basename "$f")
-        dst="/tmp/texlive-s3/pdftex/11/$bn"
-        [ ! -f "$dst" ] && cp "$f" "$dst"
-    done
-done
-
-# Type 44: Encoding files
-for base in $TEXMF_DIRS; do
-    [ -d "$base/fonts/enc" ] && find "$base/fonts/enc" -name "*.enc" | while read f; do
-        bn=$(basename "$f")
-        dst="/tmp/texlive-s3/pdftex/44/$bn"
-        [ ! -f "$dst" ] && cp "$f" "$dst"
-    done
-done
-'
-
-# 3. Copy to local filesystem
-mkdir -p /tmp/texlive-s3
-docker cp latex-texlive-1:/tmp/texlive-s3/pdftex /tmp/texlive-s3/pdftex
-
-# 4. Upload to S3
-aws s3 sync /tmp/texlive-s3/pdftex/ s3://akcorca-texlive/pdftex/
+# Use an existing local TeX Live installation instead of downloading
+TEXMF_DIST=/usr/local/texlive/2020/texmf-dist ./scripts/sync-texlive-s3.sh
 ```
 
-</details>
+The script caches the downloaded tarball in `/tmp/texlive-s3/` — subsequent runs skip the download.
 
 <details><summary>Setting up a new S3 + CloudFront deployment from scratch</summary>
 
@@ -367,4 +295,4 @@ If a file was temporarily missing and the worker cached the 404, the cache persi
 
 ### l3backend errors
 
-Newer `l3backend` packages (2023+) require `\__kernel_dependency_version_check:nn` which doesn't exist in the pdfTeX 1.40.22 format. The S3 deployment ships Ubuntu 20.04's `l3backend-pdfmode.def` (2020-02-03) which has no version check and works fine.
+Newer `l3backend` packages (2023+) require `\__kernel_dependency_version_check:nn` which doesn't exist in the pdfTeX 1.40.22 format. The S3 deployment ships TeX Live 2020's `l3backend-pdfmode.def` which has no version check and works fine.

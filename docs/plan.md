@@ -1137,6 +1137,29 @@ pdfTeX `ship_out()`에 PDL 출력 드라이버 추가. WebGPU로 PDL 렌더.
 
 TeX 매크로 훅 주입으로 `\label`/`\ref` 추적 + 진단 연동 완료. C 훅은 후속 정밀도 개선 시 추가 가능.
 
+### Option E: TeX Live 2025 업그레이드 (WASM 재빌드)
+
+현재 WASM 바이너리는 pdfTeX 1.40.22 (TeX Live 2020). S3 패키지도 TeX Live 2020. 최신 패키지를 쓰려면 WASM 바이너리 + 포맷 파일 + S3 패키지를 모두 TeX Live 2025로 올려야 한다.
+
+**작업 항목:**
+
+1. `wasm-build/Dockerfile`에서 TeX Live 소스를 2025로 변경
+2. kpse hook (`--wrap=kpse_find_file` + `library.js`)이 새 pdfTeX 소스에서 동작하는지 확인/수정
+3. SyncTeX 28개 심볼 rename이 새 소스에서 유효한지 확인/수정
+4. WASM 빌드 → 새 `.wasm` + `.js` 생성
+5. 새 포맷 파일(`.fmt`) 생성 (새 바이너리로 `pdftex -ini`)
+6. WASM heap restore 패치 (`dst.fill(0, self.initmem.length)`) 재적용
+7. `scripts/sync-texlive-s3.sh`에서 `TEXLIVE_YEAR=2025`로 변경 + S3 재업로드
+8. l3backend 호환성 문제 자동 해소 확인 (2025에서는 `l3backend-pdftex.def` 사용)
+9. E2E 테스트 전체 통과 확인
+
+**리스크:** pdfTeX 내부 API 변경 시 kpse hook / SyncTeX 패치 수정 필요 (디버깅 시간 불확실)
+
+**이점:**
+- 2020 이후 나온 패키지/업데이트 사용 가능
+- l3backend 호환성 hack 불필요
+- 장기 유지보수 용이
+
 ### Option C: PDL + LiveView (I7, 대형)
 
 가장 야심찬 목표 — 타이핑 30-80ms 내 화면 반응:

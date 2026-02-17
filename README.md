@@ -147,7 +147,7 @@ See [docs/develop.md](docs/develop.md) for the full development guide, including
 | `src/viewer/pdf-viewer.ts` | PDF rendering + SyncTeX navigation |
 | `src/synctex/synctex-parser.ts` | SyncTeX binary parser |
 | `src/editor/setup.ts` | Monaco editor setup + LaTeX language |
-| `texlive-server/` | TexLive-Ondemand HTTP server (Docker) |
+| `scripts/sync-texlive-s3.sh` | Extract TeX Live files for S3 upload (no Docker) |
 
 ## Tech Stack
 
