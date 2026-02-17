@@ -63,6 +63,7 @@ export interface FileSymbols {
   sections: SectionDef[]
   commands: CommandDef[]
   environments: EnvironmentUse[]
+  environmentDefs: EnvironmentUse[] // Reuse EnvironmentUse for definitions
   includes: IncludeDef[]
   packages: PackageRef[]
   bibItems: BibitemDef[]
@@ -82,6 +83,7 @@ export interface BibitemDef {
 export interface BibEntry {
   key: string
   type: string
+  location: SourceLocation
   title?: string
   author?: string
 }

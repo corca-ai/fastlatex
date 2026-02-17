@@ -59,7 +59,9 @@ describe('computeDiagnostics', () => {
   it('does not flag cite resolved via bib entries', () => {
     const index = new ProjectIndex()
     index.updateFile('main.tex', '\\cite{knuth84}')
-    index.updateBib([{ key: 'knuth84', type: 'book' }])
+    index.updateBib([
+      { key: 'knuth84', type: 'book', location: { file: 'refs.bib', line: 1, column: 1 } },
+    ])
     expect(computeDiagnostics(index)).toEqual([])
   })
 

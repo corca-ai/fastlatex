@@ -1,8 +1,9 @@
 import type { BibEntry } from './types'
 
-export function parseBibFile(content: string): BibEntry[] {
+export function parseBibFile(content: string, filePath: string): BibEntry[] {
   const entries: BibEntry[] = []
   const entryRegex = /@(\w+)\s*\{\s*([^,\s]+)\s*,/g
+  const lines = content.split('\n')
 
   for (let match = entryRegex.exec(content); match !== null; match = entryRegex.exec(content)) {
     const type = match[1]!.toLowerCase()
@@ -11,11 +12,29 @@ export function parseBibFile(content: string): BibEntry[] {
     // Skip non-entry types
     if (type === 'string' || type === 'preamble' || type === 'comment') continue
 
+    // Find line and column for the match index
+    let offset = 0
+    let lineNum = 1
+    let colNum = 1
+    for (let i = 0; i < lines.length; i++) {
+      const lineLen = lines[i]!.length + 1 // +1 for newline
+      if (offset + lineLen > match.index) {
+        lineNum = i + 1
+        colNum = match.index - offset + 1
+        break
+      }
+      offset += lineLen
+    }
+
     // Extract fields from the entry body
     const startIdx = match.index + match[0].length
     const fields = extractFields(content, startIdx)
 
-    const entry: BibEntry = { key, type }
+    const entry: BibEntry = {
+      key,
+      type,
+      location: { file: filePath, line: lineNum, column: colNum },
+    }
     const title = fields.get('title')
     const author = fields.get('author')
     if (title) entry.title = title

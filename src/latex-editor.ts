@@ -856,7 +856,7 @@ export class LatexEditor {
       if (!path.endsWith('.bib')) continue
       const content = this.fs.readFile(path)
       if (typeof content === 'string') {
-        entries.push(...parseBibFile(content))
+        entries.push(...parseBibFile(content, path))
       }
     }
     this.projectIndex.updateBib(entries)

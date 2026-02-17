@@ -6,6 +6,7 @@ import type {
   BibEntry,
   BibitemDef,
   CommandDef,
+  EnvironmentUse,
   FileSymbols,
   LabelDef,
   LabelRef,
@@ -207,11 +208,26 @@ export class ProjectIndex {
     return undefined
   }
 
+  /** Find the BibEntry for a given citation key in .bib files */
+  findBibEntry(key: string): BibEntry | undefined {
+    return this.bibEntries.find((e) => e.key === key)
+  }
+
   /** Find the CommandDef for a given command name */
   findCommandDef(name: string): CommandDef | undefined {
     for (const symbols of this.files.values()) {
       for (const cmd of symbols.commands) {
         if (cmd.name === name) return cmd
+      }
+    }
+    return undefined
+  }
+
+  /** Find the Environment definition for a given environment name */
+  findEnvironmentDef(name: string): EnvironmentUse | undefined {
+    for (const symbols of this.files.values()) {
+      for (const env of symbols.environmentDefs) {
+        if (env.name === name) return env
       }
     }
     return undefined

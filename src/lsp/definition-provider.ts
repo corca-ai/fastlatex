@@ -1,5 +1,5 @@
 import type * as monaco from 'monaco-editor'
-import { INPUT_CMDS, REF_CMDS, sourceLocationToMonaco } from './latex-patterns'
+import { ENV_CMDS, INPUT_CMDS, REF_CMDS, sourceLocationToMonaco } from './latex-patterns'
 import type { ProjectIndex } from './project-index'
 
 type Token = { command: string; arg: string } | { command: string }
@@ -45,7 +45,7 @@ function getTokenInBraces(line: string, col: number): { command: string; arg: st
 
 const CITE_CMD_RE = /^(?:cite|citep|citet|parencite|textcite|autocite|nocite)$/
 const ARG_CMD_RE = new RegExp(
-  `^(?:${REF_CMDS}|cite|citep|citet|parencite|textcite|autocite|nocite|${INPUT_CMDS})$`,
+  `^(?:${REF_CMDS}|cite|citep|citet|parencite|textcite|autocite|nocite|${INPUT_CMDS}|${ENV_CMDS})$`,
 )
 
 /** Try to find a \command token where the cursor is on the command word */
@@ -80,6 +80,7 @@ function getTokenAtPosition(
 
 const REF_CMD_RE = new RegExp(`^(?:${REF_CMDS})$`)
 const INPUT_CMD_RE = new RegExp(`^(?:${INPUT_CMDS})$`)
+const ENV_CMD_RE = new RegExp(`^(?:${ENV_CMDS})$`)
 
 function resolveInput(
   arg: string,
@@ -133,8 +134,13 @@ function handleArgToken(
     return null
   }
 
-  // \cite{key} -> jump to \bibitem{key}
+  // \cite{key} -> jump to BibTeX entry or \bibitem
   if (CITE_CMD_RE.test(command)) {
+    // Priority 1: .bib file entries
+    const bibEntry = index.findBibEntry(trimmedArg)
+    if (bibEntry) return sourceLocationToMonaco(bibEntry.location)
+
+    // Priority 2: \bibitem in .tex files
     const bibitem = index.findBibitemDef(trimmedArg)
     if (bibitem) return sourceLocationToMonaco(bibitem.location)
     return null
@@ -143,6 +149,13 @@ function handleArgToken(
   // \input{file} or \include{file} -> jump to file line 1
   if (INPUT_CMD_RE.test(command)) {
     return resolveInput(trimmedArg, index, model)
+  }
+
+  // \begin{env} or \end{env} -> jump to \newenvironment{env}
+  if (ENV_CMD_RE.test(command)) {
+    const envDef = index.findEnvironmentDef(trimmedArg)
+    if (envDef) return sourceLocationToMonaco(envDef.location)
+    return null
   }
 
   return null

@@ -41,6 +41,7 @@ const DEF_RE = /\\def\\(\w+)/g
 const DECLARE_MATH_RE = /\\DeclareMathOperator\*?\{\\(\w+)\}/g
 const BIBITEM_RE = /\\bibitem(?:\[.*?\])?\{/g
 const BEGIN_RE = /\\begin\{/g
+const NEWENV_RE = /\\(?:newenvironment|renewenvironment)\{([^}]+)\}/g
 const INPUT_RE = new RegExp(`\\\\(${INPUT_CMDS})\\{`, 'g')
 const USEPACKAGE_RE = new RegExp(`\\\\(?:${USEPACKAGE_CMDS})(?:\\[(.*?)\\])?\\{`, 'g')
 
@@ -181,6 +182,20 @@ function extractEnvironments(
   }
 }
 
+function extractEnvironmentDefs(
+  line: string,
+  filePath: string,
+  lineNum: number,
+  symbols: FileSymbols,
+): void {
+  for (const m of line.matchAll(NEWENV_RE)) {
+    symbols.environmentDefs.push({
+      name: m[1]!,
+      location: loc(filePath, lineNum, m.index + 1),
+    })
+  }
+}
+
 function extractIncludes(
   line: string,
   filePath: string,
@@ -240,6 +255,7 @@ export function parseLatexFile(content: string, filePath: string): FileSymbols {
     sections: [],
     commands: [],
     environments: [],
+    environmentDefs: [],
     includes: [],
     packages: [],
     bibItems: [],
@@ -261,6 +277,7 @@ export function parseLatexFile(content: string, filePath: string): FileSymbols {
     extractDeclareMath(line, filePath, lineNum, symbols)
     extractBibItems(line, filePath, lineNum, symbols)
     extractEnvironments(line, filePath, lineNum, symbols)
+    extractEnvironmentDefs(line, filePath, lineNum, symbols)
     extractIncludes(line, filePath, lineNum, symbols)
     extractPackages(line, filePath, lineNum, symbols)
   }

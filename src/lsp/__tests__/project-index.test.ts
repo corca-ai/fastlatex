@@ -122,7 +122,15 @@ describe('ProjectIndex', () => {
 
   it('bib entries can be set and retrieved', () => {
     const index = new ProjectIndex()
-    index.updateBib([{ key: 'knuth84', type: 'book', title: 'TeXbook', author: 'Knuth' }])
+    index.updateBib([
+      {
+        key: 'knuth84',
+        type: 'book',
+        title: 'TeXbook',
+        author: 'Knuth',
+        location: { file: 'refs.bib', line: 1, column: 1 },
+      },
+    ])
     expect(index.getBibEntries()).toHaveLength(1)
     expect(index.getBibEntries()[0]!.key).toBe('knuth84')
   })

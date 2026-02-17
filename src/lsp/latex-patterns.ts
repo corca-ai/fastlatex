@@ -8,6 +8,7 @@ export const INPUT_CMDS = 'input|include|subfile'
 export const SECTION_CMDS = 'part|chapter|section|subsection|subsubsection|paragraph'
 export const NEWCMD_CMDS = 'newcommand|renewcommand|providecommand'
 export const USEPACKAGE_CMDS = 'usepackage|RequirePackage'
+export const ENV_CMDS = 'begin|end'
 
 /** Find the first regex match in line that contains the given column */
 export function findMatchAtCol(line: string, re: RegExp, col: number): RegExpMatchArray | null {
