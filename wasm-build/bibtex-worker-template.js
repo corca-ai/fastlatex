@@ -176,11 +176,22 @@ function compileBibtexRoutine() {
   }
 
   _setMainEntry(allocateString(self.mainfile));
-  var status = _compileBibtex();
+
+  var status;
+  try {
+    status = _compileBibtex();
+  } catch (e) {
+    if (typeof ExitStatus !== "undefined" && e instanceof ExitStatus) {
+      /* BibTeX always calls exit() — 0=ok, 1=warnings, 2=errors */
+      status = e.status;
+    } else {
+      throw e;
+    }
+  }
 
   self.postMessage({
     "cmd": "compile",
-    "result": status === 0 ? "ok" : "error",
+    "result": status <= 1 ? "ok" : "error",
     "log": self.memlog
   });
 }
