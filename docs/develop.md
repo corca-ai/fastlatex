@@ -3,19 +3,15 @@
 ## Quick Start
 
 ```bash
-# Full stack (recommended) — editor + texlive server
-docker compose up
-# App: http://localhost:5555
-# TexLive server: http://localhost:5001
-
-# Frontend only (uses CloudFront for packages, or set VITE_TEXLIVE_URL)
 npm run dev
+# App: http://localhost:5555
 ```
+
+No Docker required. TeX packages are fetched on demand from CloudFront CDN.
 
 ## Prerequisites
 
 - Node.js (see `.nvmrc`)
-- Docker & Docker Compose
 - WASM engine files in `public/swiftlatex/` (see Engine Setup below)
 
 ## Commands
@@ -27,13 +23,11 @@ npm run dev
 | `npm run check` | TypeScript type check only |
 | `npm run test` | Unit tests (vitest, single run) |
 | `npm run test:watch` | Unit tests in watch mode |
-| `npm run test:e2e` | E2E tests (Playwright) |
+| `npm run test:e2e` | E2E tests (Playwright, requires Docker) |
 | `npm run lint` | Lint check (Biome) |
 | `npm run lint:fix` | Auto-fix lint issues |
 | `npm run format` | Format code (Biome) |
 | `npm run download-engine` | Download/setup WASM engine |
-| `docker compose up` | Full stack with texlive |
-| `docker compose build texlive` | Rebuild texlive image |
 
 ## Architecture
 
@@ -42,16 +36,13 @@ Browser
 ├── Monaco Editor (code editing)
 ├── PDF.js (PDF rendering)
 └── SwiftLaTeX WASM Worker (pdfTeX 1.40.22)
-      └── fetches packages on demand from CloudFront CDN (or Docker texlive server)
-
-Production: S3 + CloudFront (dwrg2en9emzif.cloudfront.net)
-Development: Docker texlive server (port 5001)
+      └── fetches packages on demand from CloudFront CDN
 ```
 
 - **No framework** — vanilla TypeScript + Vite
 - WASM engine runs in a Web Worker, communicates via `postMessage`
 - SyncTeX provides bidirectional PDF ↔ source navigation
-- All TeX Live packages served from S3/CloudFront in production (~120k files)
+- All TeX Live packages (~120k files) served from S3/CloudFront on demand
 
 ## Project Structure
 
@@ -70,11 +61,11 @@ src/
 └── types.ts          # Shared types
 
 public/swiftlatex/    # WASM engine files (not in git)
-texlive-server/       # Flask server for TeX packages (dev only)
 wasm-build/           # pdfTeX WASM build pipeline (Docker)
 scripts/              # Helper scripts
 e2e/                  # Playwright E2E tests
 docs/                 # Documentation
+texlive-server/       # Docker texlive (S3 extraction only, not needed for dev)
 ```
 
 ## Engine Setup
@@ -98,7 +89,7 @@ docker run --platform linux/amd64 -v "$(pwd)/dist:/dist" pdftex-wasm
 cp dist/swiftlatexpdftex.js dist/swiftlatexpdftex.wasm ../public/swiftlatex/
 ```
 
-#### Build time expectations
+<details><summary>Build time expectations</summary>
 
 The WASM build is a two-phase process and is **extremely slow** on ARM Macs (Apple Silicon) because it runs x86_64 emulation via QEMU/Rosetta.
 
@@ -115,7 +106,7 @@ The bottleneck is `libs/icu/` (ICU C++ library, ~200 source files) and `texk/web
 
 **Recommendation**: If possible, run the WASM build on an x86_64 Linux machine or CI server.
 
-#### Build phases explained
+**Build phases:**
 
 1. **Phase 1 — Native build**: Compiles TeX Live natively to generate pdfTeX C source files (`pdftex0.c`, `pdftexini.c`, etc.) using the `tangle` tool. These tools can only run natively, not under Emscripten.
 
@@ -123,24 +114,15 @@ The bottleneck is `libs/icu/` (ICU C++ library, ~200 source files) and `texk/web
 
 The full build may show errors for luajittex (missing `hb.h`) — this is expected and ignored. Only pdfTeX is needed.
 
+</details>
+
 ## TexLive Package Serving
 
-The WASM worker fetches LaTeX packages on demand during compilation. There are three serving options:
+The WASM worker fetches LaTeX packages on demand during compilation via synchronous XHR.
 
-### Option A: Docker texlive server (development)
+### How it works (S3 + CloudFront)
 
-```bash
-docker compose build texlive   # ~5GB image, includes texlive-full
-docker compose up texlive      # serves on port 5001
-```
-
-A Flask app uses `libkpathsea` to locate files in the TeX Live installation and serves them over HTTP. This is the simplest setup for development but requires Docker.
-
-### Option B: S3 + CloudFront (production, recommended)
-
-The texlive server has **no computation logic** — it only maps filenames to files via kpathsea and serves them. This can be replaced entirely by static hosting.
-
-**Current deployment:**
+All packages are served from S3 via CloudFront. This is used for **both development and production** — no local server needed.
 
 | Resource | Value |
 |----------|-------|
@@ -149,17 +131,14 @@ The texlive server has **no computation logic** — it only maps filenames to fi
 | Files | ~120,000 files, ~1.7 GB |
 | CORS | `Access-Control-Allow-Origin: *`, exposes `fileid`/`pkid` headers |
 
-To use, set the `texliveUrl` option:
-
-```typescript
-const editor = new LatexEditor({
-  texliveUrl: 'https://dwrg2en9emzif.cloudfront.net/',
-});
-```
+The URL is configured via:
+- **`npm run dev`**: defaults to `${location.origin}${BASE_URL}texlive/`, which proxies to CloudFront via Vite config, or set `VITE_TEXLIVE_URL`
+- **Production build**: `VITE_TEXLIVE_URL=https://dwrg2en9emzif.cloudfront.net/` (set in CI)
+- **Embedding API**: `new LatexEditor({ texliveUrl: 'https://dwrg2en9emzif.cloudfront.net/' })`
 
 #### URL structure
 
-The WASM worker requests files as `{texliveUrl}pdftex/{format}/{filename}`:
+The worker requests files as `{texliveUrl}pdftex/{format}/{filename}`:
 
 | Format | Content | Example |
 |--------|---------|---------|
@@ -173,7 +152,13 @@ The WASM worker requests files as `{texliveUrl}pdftex/{format}/{filename}`:
 
 Missing files must return 404 (not 403). The worker caches both hits and misses in memory.
 
-#### Rebuilding the S3 content
+### Docker texlive server (S3 extraction only)
+
+The Docker texlive server (`texlive-server/`) is **not needed for development or production**. Its only remaining purpose is as a source for extracting files to upload to S3.
+
+The server has no computation logic — it only maps filenames to files via `libkpathsea` and serves them over HTTP. This is fully replaced by the flat S3 file structure.
+
+<details><summary>Rebuilding the S3 content</summary>
 
 To extract files from the Docker texlive image and upload to S3:
 
@@ -254,7 +239,9 @@ docker cp latex-texlive-1:/tmp/texlive-s3/pdftex /tmp/texlive-s3/pdftex
 aws s3 sync /tmp/texlive-s3/pdftex/ s3://akcorca-texlive/pdftex/
 ```
 
-#### Setting up a new S3 + CloudFront deployment from scratch
+</details>
+
+<details><summary>Setting up a new S3 + CloudFront deployment from scratch</summary>
 
 ```bash
 BUCKET=akcorca-texlive
@@ -345,9 +332,11 @@ aws cloudfront create-distribution --cli-input-json "{
 }"
 ```
 
+</details>
+
 ### Version constraint
 
-The WASM binary is pdfTeX **1.40.22**. Format files (`.fmt`) must be built by this exact version. The texlive server uses a pre-built `swiftlatexpdftex.fmt` — do **not** use the system `pdflatex.fmt` (built by 1.40.20 on Ubuntu 20.04), as it produces incompatible format files ("Fatal format file error; I'm stymied").
+The WASM binary is pdfTeX **1.40.22**. Format files (`.fmt`) must be built by this exact version. Do **not** use Ubuntu 20.04's system `pdflatex.fmt` (built by 1.40.20) — it produces "Fatal format file error; I'm stymied".
 
 ## Tests
 
@@ -374,12 +363,8 @@ E2E tests use Playwright and live in `e2e/`.
 
 ### WASM worker caches 404s
 
-If the texlive server was down and the worker cached 404 responses, the cache persists across recompiles. Fix: hard refresh the browser (Cmd+Shift+R) to clear the worker's `texlive404_cache`.
-
-### "Fatal format file error; I'm stymied"
-
-The format file version doesn't match the WASM pdfTeX version (1.40.22). Use the pre-built format file from the texlive server — do not rebuild it locally.
+If a file was temporarily missing and the worker cached the 404, the cache persists across recompiles. Fix: hard refresh the browser (Cmd+Shift+R) to clear the worker's `texlive404_cache`.
 
 ### l3backend errors
 
-Newer `l3backend` packages (2023+) require `\__kernel_dependency_version_check:nn` which doesn't exist in the pdfTeX 1.40.22 format. The texlive server ships Ubuntu 20.04's `l3backend-pdfmode.def` (2020-02-03) which has no version check and works fine.
+Newer `l3backend` packages (2023+) require `\__kernel_dependency_version_check:nn` which doesn't exist in the pdfTeX 1.40.22 format. The S3 deployment ships Ubuntu 20.04's `l3backend-pdfmode.def` (2020-02-03) which has no version check and works fine.
