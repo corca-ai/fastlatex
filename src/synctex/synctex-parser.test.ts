@@ -230,6 +230,38 @@ Postamble:
 Count:5
 `
 
+/**
+ * Fixture with zero-width anchor hboxes on a later page.
+ * Simulates pdfTeX's \begin{document} (line 5) emitting invisible anchor
+ * markers on page 2, while real content (\maketitle) is at line 7 on page 1.
+ */
+const FIXTURE_ZERO_WIDTH_ANCHORS = `SyncTeX Version:1
+Input:1:./main.tex
+Output:main.pdf
+Magnification:1000
+Unit:1
+X Offset:0
+Y Offset:0
+Content:
+{1
+[1,1:0,0:34611850,49825690,0
+(1,7:4736286,3670016:25137278,655360,0
+h1,7:4736286,3670016:10000000,655360,0
+)
+]
+}1
+{2
+[1,1:0,0:34611850,49825690,0
+(1,5:4736286,3670016:0,655360,196608
+)
+(1,5:10000000,3670016:0,655360,196608
+)
+]
+}2
+Postamble:
+Count:5
+`
+
 // Conversion factor for default settings (unit=1, mag=1000)
 // pdf_pt = sp * 1 * 1000/1000 / 65536 * 72/72.27
 const SP_TO_PDF = (1 / 65536) * (72 / 72.27)
@@ -563,6 +595,19 @@ Count:0
       expect(result!.width).toBeCloseTo(hboxW, 0)
       // Should have real height from the hbox, not the 12pt default
       expect(result!.height).toBeGreaterThan(5)
+    })
+
+    it('skips zero-width anchor hboxes from \\begin{document}', () => {
+      const data = parser.parseText(FIXTURE_ZERO_WIDTH_ANCHORS)
+
+      // Line 5 has only zero-width hboxes on page 2 (anchor markers).
+      // Line 7 has real content on page 1.
+      // Forward search for line 5 should zigzag to line 7 (page 1),
+      // NOT match the zero-width anchors on page 2.
+      const result = parser.forwardLookup(data, 'main.tex', 5)
+      // zigzag ±3 from line 5 reaches line 7
+      expect(result).not.toBeNull()
+      expect(result!.page).toBe(1)
     })
 
     it('does not include distant items when clustering by vertical position', () => {

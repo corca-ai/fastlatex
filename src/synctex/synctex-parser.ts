@@ -584,15 +584,21 @@ export class SynctexParser {
     const friends = data.friendIndex?.get(`${inputTag}:${line}`)
     if (!friends || friends.length === 0) return null
 
+    // Skip zero-width anchor nodes (label markers, counter marks, etc.)
+    // pdfTeX emits these at \begin{document} time for internal LaTeX bookkeeping;
+    // they appear on distant pages and would cause incorrect forward-search jumps.
+    const visible = friends.filter((n) => n.width > 0 || !isBox(n))
+    if (visible.length === 0) return null
+
     // First pass: non-box nodes only (reference: exclude_box=YES)
-    const nonBox = friends.filter((n) => !isBox(n))
+    const nonBox = visible.filter((n) => !isBox(n))
     if (nonBox.length > 0) {
       const result = this.forwardFromNodes(nonBox)
       if (result) return result
     }
 
     // Second pass: include all nodes (reference: exclude_box=NO)
-    return this.forwardFromNodes(friends)
+    return this.forwardFromNodes(visible)
   }
 
   /** Compute forward search result from matched nodes */
