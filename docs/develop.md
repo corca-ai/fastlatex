@@ -26,7 +26,7 @@ TeX packages are fetched on demand from CloudFront CDN via Vite proxy (configure
 | `npm run check` | TypeScript type check only (`tsgo --noEmit`) |
 | `npm run test` | Unit tests (vitest, single run) |
 | `npm run test:watch` | Unit tests in watch mode |
-| `npm run test:e2e` | E2E tests (Playwright, requires `docker compose up`) |
+| `npm run test:e2e` | E2E tests (Playwright) |
 | `npm run lint` | Lint check (Biome) |
 | `npm run lint:fix` | Auto-fix lint issues |
 | `npm run format` | Format code (Biome) |
@@ -38,8 +38,10 @@ TeX packages are fetched on demand from CloudFront CDN via Vite proxy (configure
 Browser
 ├── Monaco Editor (code editing)
 ├── PDF.js (PDF rendering)
-└── SwiftLaTeX WASM Worker (pdfTeX 1.40.22)
-      └── fetches packages on demand from CloudFront CDN
+├── SwiftLaTeX WASM Worker (pdfTeX 1.40.22)
+│     └── fetches packages on demand from CloudFront CDN
+└── BibTeX WASM Worker (separate binary)
+      └── runs bibtex chain: pdflatex → bibtex → pdflatex
 ```
 
 - **No framework** — vanilla TypeScript + Vite
@@ -90,6 +92,8 @@ cd wasm-build
 docker build --platform linux/amd64 -t pdftex-wasm .
 docker run --platform linux/amd64 -v "$(pwd)/dist:/dist" pdftex-wasm
 cp dist/swiftlatexpdftex.js dist/swiftlatexpdftex.wasm ../public/swiftlatex/
+# BibTeX WASM (also built automatically if Phase 1 includes --enable-bibtex):
+cp dist/swiftlatexbibtex.js dist/swiftlatexbibtex.wasm ../public/swiftlatex/
 ```
 
 <details><summary>Build time expectations</summary>
@@ -133,6 +137,8 @@ The worker requests files as `{texliveUrl}pdftex/{format}/{filename}`:
 | Format | Content | Example |
 |--------|---------|---------|
 | 3 | TFM font metrics | `pdftex/3/cmr10` |
+| 6 | BibTeX support files (.bib) | `pdftex/6/xampl.bib` |
+| 7 | BibTeX style files (.bst) | `pdftex/7/plain` |
 | 10 | Format files | `pdftex/10/swiftlatexpdftex.fmt` |
 | 11 | Font maps | `pdftex/11/pdftex.map` |
 | 26 | TeX sources (.sty, .cls, .def) | `pdftex/26/geometry.sty` |
@@ -155,15 +161,6 @@ Downloads the TeX Live 2020 texmf tarball from CTAN, extracts into flat structur
 
 The WASM binary is pdfTeX **1.40.22**. Format files (`.fmt`) must match this exact version — Ubuntu 20.04's system `pdflatex.fmt` (built by 1.40.20) will not work.
 
-## Docker
-
-`docker compose up` runs the Vite dev server in a container (port 5555 → 5173). Useful for E2E tests.
-
-```bash
-docker compose up -d    # start
-npm run test:e2e        # Playwright tests hit localhost:5555
-```
-
 ## Tests
 
 ### Unit tests
@@ -178,7 +175,6 @@ Test files live next to source: `src/**/*.test.ts`
 ### E2E tests
 
 ```bash
-docker compose up -d
 npm run test:e2e
 ```
 
