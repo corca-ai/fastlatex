@@ -752,6 +752,7 @@ function compileLaTeXRoutine() {
             pdfArrayBuffer = FS.readFile(pdfPath, { encoding: "binary" });
         } catch(err) {
             console.error("Failed to read PDF output: " + pdfPath);
+            console.error("[memlog]\n" + self.memlog);
             self.postMessage({
                 "result": "failed",
                 "status": status,
