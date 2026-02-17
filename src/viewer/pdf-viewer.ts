@@ -125,6 +125,32 @@ export class PdfViewer {
 
     this.pagesContainer = document.createElement('div')
     this.container.appendChild(this.pagesContainer)
+
+    // Single delegated click handler for inverse search — avoids duplicate
+    // listeners that accumulate when canvases are recycled across renders.
+    this.pagesContainer.addEventListener('click', (e) => {
+      if (!this.onInverseSearch) return
+      const target = e.target
+      if (!(target instanceof HTMLCanvasElement)) return
+
+      const wrapper = target.closest('.pdf-page-container') as HTMLElement | null
+      if (!wrapper) return
+      const pageNum = parseInt(wrapper.dataset.pageNum ?? '0', 10)
+      if (pageNum === 0) return
+
+      const rect = target.getBoundingClientRect()
+      const x = (e.clientX - rect.left) / this.scale
+      const y = (e.clientY - rect.top) / this.scale
+
+      let loc: SourceLocation | null = null
+      if (this.synctexData) {
+        loc = this.synctexParser.inverseLookup(this.synctexData, pageNum, x, y)
+      }
+      if (!loc) {
+        loc = this.textMapper.lookup(pageNum, x, y)
+      }
+      if (loc) this.onInverseSearch(loc)
+    })
   }
 
   private zoomLabel!: HTMLSpanElement
@@ -197,8 +223,6 @@ export class PdfViewer {
     const firstResult = await this.pageRenderer.renderPage(this.pdfDoc, visiblePage, this.scale)
     if (generation !== this.renderGeneration) return
 
-    this.attachInverseSearch(firstResult.canvas, visiblePage)
-
     const wrappers = this.buildPageWrappers(numPages, visiblePage, firstResult.wrapper, oldWrappers)
     this.swapPages(wrappers, visiblePage)
 
@@ -215,8 +239,6 @@ export class PdfViewer {
       const result = await this.pageRenderer.renderPage(this.pdfDoc, i, this.scale)
       if (generation !== this.renderGeneration) return
 
-      this.attachInverseSearch(result.canvas, i)
-
       // Old wrapper's canvas is still in DOM — recycle after replacement
       const oldCanvas = wrappers[i - 1]?.querySelector('canvas')
       wrappers[i - 1]!.replaceWith(result.wrapper)
@@ -226,25 +248,6 @@ export class PdfViewer {
 
     // Re-observe after all pages are real
     this.observePages()
-  }
-
-  /** Attach inverse search click handler to a rendered canvas */
-  private attachInverseSearch(canvas: HTMLCanvasElement, pageNum: number): void {
-    canvas.addEventListener('click', (e) => {
-      if (!this.onInverseSearch) return
-      const rect = canvas.getBoundingClientRect()
-      const x = (e.clientX - rect.left) / this.scale
-      const y = (e.clientY - rect.top) / this.scale
-
-      let loc: SourceLocation | null = null
-      if (this.synctexData) {
-        loc = this.synctexParser.inverseLookup(this.synctexData, pageNum, x, y)
-      }
-      if (!loc) {
-        loc = this.textMapper.lookup(pageNum, x, y)
-      }
-      if (loc) this.onInverseSearch(loc)
-    })
   }
 
   /** Build page wrapper elements (rendered page + old wrappers as placeholders) */
@@ -360,7 +363,7 @@ export class PdfViewer {
       `width: ${Math.max(loc.width * this.scale, 200)}px`,
       `height: ${Math.max(loc.height * this.scale, 20)}px`,
       'background: rgba(255, 200, 0, 0.3)',
-      'border: 2px solid rgba(255, 150, 0, 0.7)',
+      'border: none',
       'pointer-events: none',
       'transition: opacity 0.5s',
     ].join(';')
