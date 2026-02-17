@@ -41,14 +41,12 @@ export class SwiftLatexEngine {
   private worker: Worker | null = null
   private status: EngineStatus = 'unloaded'
   private texliveUrl: string | null
-  private baseUrl: string
   private enginePath: string
   private formatPath: string
   private pendingResponses = new Map<string, (data: WorkerMessage) => void>()
 
   constructor(options?: SwiftLatexEngineOptions) {
     const base = options?.assetBaseUrl ?? import.meta.env.BASE_URL
-    this.baseUrl = base
     this.enginePath = `${base}swiftlatex/swiftlatexpdftex.js`
     this.formatPath = `${base}swiftlatex/swiftlatexpdftex.fmt`
     this.texliveUrl = options?.texliveUrl ?? null
@@ -86,7 +84,7 @@ export class SwiftLatexEngine {
     // Pre-load format and pdftex.map in parallel
     await Promise.all([
       this.preloadFormat(),
-      this.preloadTexliveFile(11, 'pdftex.map', `${this.baseUrl}texlive/pdftex/11/pdftex.map`),
+      this.preloadTexliveFile(11, 'pdftex.map', `${texliveUrl}pdftex/11/pdftex.map`),
     ])
   }
 

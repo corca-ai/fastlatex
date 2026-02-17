@@ -936,12 +936,13 @@ self["onmessage"] = function(ev) {
     } else if (cmd === "setmainfile") {
         self.mainfile = data["url"];
     } else if (cmd === "loadformat") {
-        // Pre-load a format file (.fmt) as a FALLBACK for when the texlive
-        // server is unavailable (e.g. gh-pages). Stored separately from
-        // _fmtData so the worker still tries to build a fresh format first.
+        // Pre-load a format file (.fmt). The preloaded format was built by
+        // the same pdfTeX 1.40.22 WASM binary, so it's fully compatible.
+        // Set _fmtData directly to skip the slow format-build-from-scratch
+        // step, and mark as native to enable preamble caching.
         var fmtData = new Uint8Array(data["data"]);
-        self._fmtFallback = fmtData;
-        // console.log("[loadformat] Fallback format loaded: " + fmtData.length + " bytes");
+        self._fmtData = fmtData;
+        self._fmtIsNative = true;
         self.postMessage({ "result": "ok", "cmd": "loadformat" });
     } else if (cmd === "preloadtexlive") {
         // Pre-load a texlive file from main thread (avoids sync XHR on first compile).
