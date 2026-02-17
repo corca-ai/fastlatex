@@ -1,9 +1,11 @@
 import type * as Monaco from 'monaco-editor'
 import { createEditor, createFileModel, revealLine } from './editor/setup'
+import { BibtexEngine } from './engine/bibtex-engine'
 import { CompileScheduler } from './engine/compile-scheduler'
 import { SwiftLatexEngine } from './engine/swiftlatex-engine'
 import { VirtualFS } from './fs/virtual-fs'
 import { parseAuxFile } from './lsp/aux-parser'
+import { parseBibFile } from './lsp/bib-parser'
 import { computeDiagnostics } from './lsp/diagnostic-provider'
 import { ProjectIndex } from './lsp/project-index'
 import { registerLatexProviders } from './lsp/register-providers'
@@ -73,6 +75,9 @@ export class LatexEditor {
   private switchingModel = false
   private lastCompileErrors: TexError[] = []
   private previewEl: HTMLElement | null = null
+  private bibtexEngine: BibtexEngine | null = null
+  private bibtexDone = false
+  private pendingBibtex = false
   private disposed = false
 
   // --- Events ---
@@ -160,6 +165,8 @@ export class LatexEditor {
         }
       }
     }
+    this.updateBibIndex()
+    this.bibtexDone = false
     // Dispose models for removed files
     for (const path of oldPaths) {
       if (!newPaths.has(path)) {
@@ -198,6 +205,9 @@ export class LatexEditor {
     if (typeof content === 'string') {
       if (path.endsWith('.tex')) {
         this.projectIndex.updateFile(path, content)
+      }
+      if (path.endsWith('.bib')) {
+        this.updateBibIndex()
       }
       const model = this.models.get(path)
       if (model) {
@@ -281,6 +291,7 @@ export class LatexEditor {
     for (const model of this.models.values()) model.dispose()
     this.models.clear()
     this.engine.terminate()
+    this.bibtexEngine?.terminate()
     this.listeners.clear()
     this.root.remove()
   }
@@ -385,6 +396,7 @@ export class LatexEditor {
         this.projectIndex.updateFile(path, file.content)
       }
     }
+    this.updateBibIndex()
 
     // Ensure current file has a model (even if empty)
     if (!this.models.has(this.currentFile)) {
@@ -521,8 +533,12 @@ export class LatexEditor {
     if (this.previewEl && this.previewEl.style.display !== 'none') return
     perf.mark('total')
     perf.mark('debounce')
+    this.bibtexDone = false
     this.fs.writeFile(this.currentFile, content)
     this.projectIndex.updateFile(this.currentFile, content)
+    if (this.currentFile.endsWith('.bib')) {
+      this.updateBibIndex()
+    }
     this.runDiagnostics()
     this.emit('filechange', { path: this.currentFile, content })
     this.syncAndCompile()
@@ -652,7 +668,13 @@ export class LatexEditor {
     setErrorMarkers(result.errors)
     this.updateAuxIndex()
     this.runDiagnostics()
-    this.maybeRecompile(result)
+    // BibTeX takes priority over cross-ref recompile
+    if (!this.pendingBibtex) {
+      this.maybeRunBibtex(result)
+    }
+    if (!this.pendingBibtex) {
+      this.maybeRecompile(result)
+    }
     this.emit('compile', { result })
   }
 
@@ -695,6 +717,111 @@ export class LatexEditor {
     } else {
       this.pendingRecompile = false
     }
+  }
+
+  private maybeRunBibtex(result: CompileResult): void {
+    if (this.pendingRecompile || this.pendingBibtex || !result.success || this.bibtexDone) return
+
+    const hasBibFiles = this.fs.listFiles().some((f) => f.endsWith('.bib'))
+    if (!hasBibFiles) return
+
+    this.pendingBibtex = true
+    this.bibtexDone = true
+
+    this.runBibtexChain()
+      .catch((err) => {
+        console.warn('BibTeX chain error:', err)
+      })
+      .finally(() => {
+        this.pendingBibtex = false
+      })
+  }
+
+  private async runBibtexChain(): Promise<void> {
+    const mainBase = this.mainFile.replace(/\.tex$/, '')
+    const auxContent = await this.engine.readFile(`${mainBase}.aux`)
+    if (!auxContent) return
+
+    // Check for BibTeX markers in .aux
+    if (!auxContent.includes('\\citation{') || !auxContent.includes('\\bibdata{')) return
+
+    // Initialize bibtex engine lazily
+    const engine = await this.ensureBibtexEngine()
+    if (!engine) return
+
+    // Send files to bibtex engine
+    this.sendFilesToBibtex(engine, mainBase, auxContent)
+
+    // Run bibtex
+    const bibtexResult = await engine.compile(mainBase)
+    if (!bibtexResult.success) {
+      console.warn('BibTeX compilation failed:', bibtexResult.log)
+      return
+    }
+
+    // Read .bbl and write to pdfTeX engine, then recompile
+    const bbl = await engine.readFile(`${mainBase}.bbl`)
+    if (!bbl) return
+
+    this.engine.writeFile(`${mainBase}.bbl`, bbl)
+
+    this.pendingRecompile = true
+    const r = await this.engine.compile()
+    this.pendingRecompile = false
+    this.onCompileResult(r)
+    this.syncAndCompile()
+  }
+
+  private async ensureBibtexEngine(): Promise<BibtexEngine | null> {
+    if (this.bibtexEngine) return this.bibtexEngine
+
+    const opts: { assetBaseUrl?: string; texliveUrl?: string } = {}
+    if (this.opts.assetBaseUrl) opts.assetBaseUrl = this.opts.assetBaseUrl
+    if (this.opts.texliveUrl) opts.texliveUrl = this.opts.texliveUrl
+    this.bibtexEngine = new BibtexEngine(opts)
+    try {
+      await this.bibtexEngine.init()
+      return this.bibtexEngine
+    } catch (err) {
+      console.warn('BibTeX engine init failed:', err)
+      this.bibtexEngine = null
+      return null
+    }
+  }
+
+  private sendFilesToBibtex(engine: BibtexEngine, mainBase: string, auxContent: string): void {
+    engine.writeFile(`${mainBase}.aux`, auxContent)
+
+    // Write .bib files
+    const bibFiles = this.fs.listFiles().filter((f) => f.endsWith('.bib'))
+    for (const bibPath of bibFiles) {
+      const content = this.fs.readFile(bibPath)
+      if (content != null) {
+        engine.writeFile(bibPath, content)
+      }
+    }
+
+    // Write .bst file if referenced
+    const bstMatch = auxContent.match(/\\bibstyle\{([^}]+)\}/)
+    if (!bstMatch) return
+    const bstName = bstMatch[1]!
+    const bstPath = bstName.endsWith('.bst') ? bstName : `${bstName}.bst`
+    const bstContent = this.fs.readFile(bstPath)
+    if (bstContent != null) {
+      engine.writeFile(bstPath, bstContent)
+    }
+  }
+
+  private updateBibIndex(): void {
+    const entries: import('./lsp/types').BibEntry[] = []
+    for (const path of this.fs.listFiles()) {
+      if (!path.endsWith('.bib')) continue
+      const content = this.fs.readFile(path)
+      if (typeof content === 'string') {
+        entries.push(...parseBibFile(content))
+      }
+    }
+    this.projectIndex.updateBib(entries)
   }
 
   private updateAuxIndex(): void {

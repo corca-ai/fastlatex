@@ -112,6 +112,7 @@ PDFTEX_CXX_SOURCES = \
 COMMON_CONFIGURE_FLAGS = \
 	--disable-all-pkgs \
 	--enable-pdftex \
+	--enable-bibtex \
 	--enable-synctex \
 	--enable-web2c \
 	--without-x \
@@ -448,7 +449,80 @@ dist:
 # Top-level targets
 # =============================================================================
 
+# =============================================================================
+# BibTeX WASM Build (separate binary)
+# =============================================================================
+#
+# BibTeX is built as a separate WASM binary to avoid web2c symbol conflicts
+# with pdfTeX. It shares kpathsea infrastructure but is much smaller
+# (no PDF/image/SyncTeX support needed).
+#
+# Phase 1 must be rebuilt with --enable-bibtex to generate bibtex C files.
+# The Dockerfile Phase 1 commands need updating to match COMMON_CONFIGURE_FLAGS.
+
+BIBTEX_ENTRY   = /src/bibtex-entry.c
+BIBTEX_WORKER  = /src/bibtex-worker-template.js
+
+BIBTEX_EMCC_FLAGS = \
+	-O2 \
+	-Wno-implicit-function-declaration \
+	-sALLOW_MEMORY_GROWTH=1 \
+	-sFORCE_FILESYSTEM=1 \
+	-sEXIT_RUNTIME=0 \
+	-sINVOKE_RUN=0 \
+	-sMODULARIZE=0 \
+	-sEXPORTED_FUNCTIONS='["_compileBibtex","_main","_setMainEntry","_malloc","_free"]' \
+	-sEXPORTED_RUNTIME_METHODS='["UTF8ToString","FS"]' \
+	-sINITIAL_MEMORY=67108864 \
+	-sWASM=1 \
+	--js-library $(JSLIB) \
+	-Wl,--wrap=kpse_find_file
+
+bibtex-wasm-prep:
+	@echo "========================================"
+	@echo "BibTeX: Prepare WASM sources"
+	@echo "========================================"
+	# Copy bibtex C files from native build (Phase 1 with --enable-bibtex)
+	-cp $(BUILD_NATIVE)/texk/web2c/bibtex.c      $(BUILD_WASM)/texk/web2c/ 2>/dev/null
+	-cp $(BUILD_NATIVE)/texk/web2c/bibtex.h      $(BUILD_WASM)/texk/web2c/ 2>/dev/null
+	-cp $(BUILD_NATIVE)/texk/web2c/bibtex-pool.c $(BUILD_WASM)/texk/web2c/ 2>/dev/null
+	-cp $(BUILD_NATIVE)/texk/web2c/bibtexd.h     $(BUILD_WASM)/texk/web2c/ 2>/dev/null
+	@ls $(BUILD_WASM)/texk/web2c/bibtex*.c 2>/dev/null || \
+		echo "WARNING: bibtex C files not found. Phase 1 needs --enable-bibtex."
+
+bibtex-wasm-compile: bibtex-wasm-prep
+	@echo "========================================"
+	@echo "BibTeX: WASM compile"
+	@echo "========================================"
+	cd $(WEB2C_BUILD) && \
+		emcc $(BIBTEX_EMCC_FLAGS) \
+		-DHAVE_CONFIG_H \
+		-I$(WEB2C_BUILD) \
+		-I$(WEB2C_BUILD)/w2c \
+		-I$(WEB2C_SRC) \
+		-I$(WEB2C_SRC)/w2c \
+		-I$(WEB2C_SRC)/lib \
+		-I$(BUILD_WASM)/texk/kpathsea \
+		-I$(TEXLIVE_SRC)/texk/kpathsea \
+		-I$(TEXLIVE_SRC)/texk \
+		-I$(BUILD_WASM)/texk \
+		bibtex.c \
+		bibtex-pool.c \
+		$(WEB2C_LIB_SOURCES) \
+		$(BIBTEX_ENTRY) \
+		$(KPSE_HOOK) \
+		$$(find $(BUILD_WASM) -name 'libkpathsea.a' | head -1) \
+		--pre-js $(BIBTEX_WORKER) \
+		-o $(DIST)/swiftlatexbibtex.js
+	@echo "BibTeX WASM compilation complete."
+
+# =============================================================================
+# Top-level targets
+# =============================================================================
+
 all: native-configure native-build wasm-configure wasm-build dist
+
+all-with-bibtex: all bibtex-wasm-compile
 
 clean:
 	rm -rf $(BUILD_NATIVE) $(BUILD_WASM)

@@ -66,8 +66,27 @@ echo "--- Step 4/4: Final emcc compile ---"
 make -f /src/Makefile wasm-compile
 echo ""
 
-echo "--- Packaging output ---"
+echo "--- Packaging pdfTeX output ---"
 make -f /src/Makefile dist
+echo ""
+
+# ---------------------------------------------------------------------------
+# BibTeX WASM build (optional — requires Phase 1 with --enable-bibtex)
+# ---------------------------------------------------------------------------
+
+if ls /build/native/texk/web2c/bibtex*.c >/dev/null 2>&1; then
+    echo "============================================================"
+    echo "  BibTeX WASM build"
+    echo "============================================================"
+    echo ""
+    echo "--- BibTeX: compile ---"
+    make -f /src/Makefile bibtex-wasm-compile
+    echo ""
+    ls -lh /dist/swiftlatexbibtex.* 2>/dev/null || echo "  (BibTeX build failed)"
+else
+    echo "Skipping BibTeX WASM build (no bibtex C files from Phase 1)."
+    echo "To build BibTeX, rebuild Docker image with --enable-bibtex in Phase 1."
+fi
 echo ""
 
 # ---------------------------------------------------------------------------
@@ -83,9 +102,12 @@ echo "  Build Complete — ${TOTAL_TIME} seconds"
 echo "============================================================"
 echo ""
 echo "  Output files in /dist/:"
-ls -lh /dist/swiftlatexpdftex.* 2>/dev/null || echo "  (no output files found)"
+ls -lh /dist/swiftlatexpdftex.* 2>/dev/null || echo "  (no pdfTeX output files found)"
+ls -lh /dist/swiftlatexbibtex.* 2>/dev/null || echo "  (no BibTeX output — Phase 1 needs --enable-bibtex)"
 echo ""
 echo "  To use in the editor:"
 echo "    cp dist/swiftlatexpdftex.js   public/swiftlatex/"
 echo "    cp dist/swiftlatexpdftex.wasm public/swiftlatex/"
+echo "    cp dist/swiftlatexbibtex.js   public/swiftlatex/  (if built)"
+echo "    cp dist/swiftlatexbibtex.wasm public/swiftlatex/  (if built)"
 echo ""
