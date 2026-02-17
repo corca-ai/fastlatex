@@ -183,22 +183,31 @@ export class PdfViewer {
     const numPages = this.pdfDoc.numPages
     this.pageInfo.textContent = `Page ${this.currentPage} / ${numPages}`
 
-    // Collect old canvases for recycling
-    const oldCanvases = Array.from(this.pagesContainer.querySelectorAll('canvas'))
-    this.pageRenderer.recycle(oldCanvases as HTMLCanvasElement[])
+    // Save old wrappers — reused as placeholders to keep previous content visible
+    // instead of showing blank divs (prevents flicker on non-visible pages).
+    const oldWrappers = Array.from(
+      this.pagesContainer.querySelectorAll('.pdf-page-container'),
+    ) as HTMLElement[]
 
-    // Phase 1: Render the current (visible) page first and swap immediately
+    // Phase 1: Render the current (visible) page to a NEW offscreen canvas.
+    // Don't recycle anything yet — old canvases are still visible in the DOM.
     const visiblePage = Math.min(this.currentPage, numPages)
     if (generation !== this.renderGeneration) return
+
     const firstResult = await this.pageRenderer.renderPage(this.pdfDoc, visiblePage, this.scale)
     if (generation !== this.renderGeneration) return
 
     this.attachInverseSearch(firstResult.canvas, visiblePage)
 
-    const wrappers = this.buildPageWrappers(numPages, visiblePage, firstResult.wrapper)
+    const wrappers = this.buildPageWrappers(numPages, visiblePage, firstResult.wrapper, oldWrappers)
     this.swapPages(wrappers, visiblePage)
 
-    // Phase 2: Render remaining pages in the background
+    // The visible page's old wrapper is now out of the DOM — safe to recycle its canvas
+    const visibleOldCanvas = oldWrappers[visiblePage - 1]?.querySelector('canvas')
+    if (visibleOldCanvas) this.pageRenderer.recycle([visibleOldCanvas as HTMLCanvasElement])
+
+    // Phase 2: Render remaining pages to offscreen canvases, then swap atomically.
+    // Recycle each old canvas only AFTER its wrapper leaves the DOM.
     for (let i = 1; i <= numPages; i++) {
       if (i === visiblePage) continue
       if (generation !== this.renderGeneration) return
@@ -207,9 +216,12 @@ export class PdfViewer {
       if (generation !== this.renderGeneration) return
 
       this.attachInverseSearch(result.canvas, i)
-      // Replace placeholder with rendered page
+
+      // Old wrapper's canvas is still in DOM — recycle after replacement
+      const oldCanvas = wrappers[i - 1]?.querySelector('canvas')
       wrappers[i - 1]!.replaceWith(result.wrapper)
       wrappers[i - 1] = result.wrapper
+      if (oldCanvas) this.pageRenderer.recycle([oldCanvas as HTMLCanvasElement])
     }
 
     // Re-observe after all pages are real
@@ -235,23 +247,25 @@ export class PdfViewer {
     })
   }
 
-  /** Build page wrapper elements (rendered page + placeholders) */
+  /** Build page wrapper elements (rendered page + old wrappers as placeholders) */
   private buildPageWrappers(
     numPages: number,
     visiblePage: number,
     renderedWrapper: HTMLElement,
+    oldWrappers: HTMLElement[],
   ): HTMLElement[] {
     const wrappers = new Array<HTMLElement>(numPages)
-    // Use the canvas's inline style for dimensions — offsetWidth/Height is 0
-    // when the wrapper isn't in the DOM yet, causing all placeholders to collapse
-    // and scroll position restoration to fail.
     const canvas = renderedWrapper.querySelector('canvas')!
     const pageWidth = canvas.style.width
     const pageHeight = canvas.style.height
     for (let i = 1; i <= numPages; i++) {
       if (i === visiblePage) {
         wrappers[i - 1] = renderedWrapper
+      } else if (oldWrappers[i - 1]) {
+        // Reuse old wrapper to keep previous content visible (no blank flash)
+        wrappers[i - 1] = oldWrappers[i - 1]!
       } else {
+        // New page with no previous content — sized placeholder
         const placeholder = document.createElement('div')
         placeholder.className = 'pdf-page-container'
         placeholder.dataset.pageNum = String(i)
@@ -265,13 +279,15 @@ export class PdfViewer {
 
   /** Swap page DOM and restore scroll position within the current page */
   private swapPages(wrappers: HTMLElement[], visiblePage: number): void {
-    const fragment = document.createDocumentFragment()
-    for (const w of wrappers) fragment.appendChild(w)
-
+    // Capture scroll position BEFORE building fragment — appendChild moves
+    // old wrappers out of the DOM, which changes their offsetTop.
     const oldPageEl = this.pagesContainer.querySelector(
       `.pdf-page-container[data-page-num="${visiblePage}"]`,
     ) as HTMLElement | null
     const inPageOffset = oldPageEl ? this.container.scrollTop - oldPageEl.offsetTop : 0
+
+    const fragment = document.createDocumentFragment()
+    for (const w of wrappers) fragment.appendChild(w)
 
     this.pagesContainer.replaceChildren(fragment)
 
