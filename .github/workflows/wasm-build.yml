@@ -41,16 +41,28 @@ jobs:
           rm -rf /tmp/.buildx-cache
           mv /tmp/.buildx-cache-new /tmp/.buildx-cache
 
-      - name: Smoke test WASM artifacts
+      - name: Smoke test pdfTeX WASM
         run: |
           node -e "
             const fs = require('fs');
             const wasm = fs.readFileSync('wasm-build/dist/swiftlatexpdftex.wasm');
             if (!WebAssembly.validate(wasm)) process.exit(1);
-            console.log('WASM OK (' + wasm.length + ' bytes)');
+            console.log('pdfTeX WASM OK (' + wasm.length + ' bytes)');
             const js = fs.readFileSync('wasm-build/dist/swiftlatexpdftex.js', 'utf8');
             if (!js.includes('_scanHashTable')) { console.error('Missing _scanHashTable export'); process.exit(1); }
             console.log('_scanHashTable export found');
+          "
+
+      - name: Smoke test BibTeX WASM
+        run: |
+          node -e "
+            const fs = require('fs');
+            const wasm = fs.readFileSync('wasm-build/dist/swiftlatexbibtex.wasm');
+            if (!WebAssembly.validate(wasm)) process.exit(1);
+            console.log('BibTeX WASM OK (' + wasm.length + ' bytes)');
+            const js = fs.readFileSync('wasm-build/dist/swiftlatexbibtex.js', 'utf8');
+            if (!js.includes('compileBibtexRoutine')) { console.error('Missing compileBibtexRoutine'); process.exit(1); }
+            console.log('compileBibtexRoutine found');
           "
 
       - name: Upload WASM artifacts
@@ -60,4 +72,6 @@ jobs:
           path: |
             wasm-build/dist/swiftlatexpdftex.js
             wasm-build/dist/swiftlatexpdftex.wasm
+            wasm-build/dist/swiftlatexbibtex.js
+            wasm-build/dist/swiftlatexbibtex.wasm
           retention-days: 90

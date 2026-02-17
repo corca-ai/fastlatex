@@ -71,6 +71,7 @@ RUN echo "=== Phase 1a: Native configure ===" && \
     /src/texlive-source/configure \
         --disable-all-pkgs \
         --enable-pdftex \
+        --enable-bibtex \
         --enable-synctex \
         --enable-web2c \
         --without-x \
@@ -116,6 +117,8 @@ COPY wasm-entry.c /src/wasm-entry.c
 COPY kpse-hook.c /src/kpse-hook.c
 COPY library.js /src/library.js
 COPY trace-hook.c /src/trace-hook.c
+COPY bibtex-entry.c /src/bibtex-entry.c
+COPY bibtex-worker-template.js /src/bibtex-worker-template.js
 
 RUN chmod +x /src/build.sh
 
