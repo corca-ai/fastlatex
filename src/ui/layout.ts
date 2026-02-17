@@ -2,7 +2,7 @@ export function setupDividers(root?: HTMLElement): void {
   const el = root ?? document
   setupDivider(
     el.querySelector<HTMLElement>('.le-divider-left')!,
-    el.querySelector<HTMLElement>('.le-file-tree')!,
+    el.querySelector<HTMLElement>('.le-left-panel')!,
     el.querySelector<HTMLElement>('.le-main')!,
     120,
     400,

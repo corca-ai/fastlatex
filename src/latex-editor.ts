@@ -23,6 +23,7 @@ import { ErrorLog } from './ui/error-log'
 import { setDiagnosticMarkers, setErrorMarkers } from './ui/error-markers'
 import { FileTree } from './ui/file-tree'
 import { setupDividers } from './ui/layout'
+import { Outline } from './ui/outline'
 import { PdfViewer } from './viewer/pdf-viewer'
 
 const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.svg', '.bmp', '.webp'])
@@ -56,6 +57,7 @@ export class LatexEditor {
   private pdfViewer!: PdfViewer
   private errorLog!: ErrorLog
   private fileTree!: FileTree
+  private outline!: Outline
   private scheduler!: CompileScheduler
   private editor!: Monaco.editor.IStandaloneCodeEditor
   private projectIndex = new ProjectIndex()
@@ -185,6 +187,7 @@ export class LatexEditor {
       this.editor.setModel(model)
       this.switchingModel = false
     }
+    this.outline.update(this.currentFile)
     // Sync and compile
     this.syncAndCompile()
   }
@@ -329,7 +332,10 @@ export class LatexEditor {
 
     root.innerHTML = `
       <div class="le-main" id="main-container">
-        <div class="le-file-tree panel" id="file-tree-panel"></div>
+        <div class="le-left-panel panel" id="left-panel">
+          <div class="le-file-tree" id="file-tree-container"></div>
+          <div class="le-outline" id="outline-container"></div>
+        </div>
         <div class="le-divider-left divider"></div>
         <div class="le-editor panel" id="editor-panel"></div>
         <div class="le-divider-right divider"></div>
@@ -450,6 +456,7 @@ export class LatexEditor {
           if (this.currentFile !== path) {
             this.currentFile = path
             this.fileTree.setActive(path)
+            this.outline.update(path)
             this.runDiagnostics()
           }
           break
@@ -460,6 +467,13 @@ export class LatexEditor {
     // File Tree
     const fileTreeContainer = this.root.querySelector<HTMLElement>('.le-file-tree')!
     this.fileTree = new FileTree(fileTreeContainer, this.fs, (path) => this.onFileSelect(path))
+
+    // Outline
+    const outlineContainer = this.root.querySelector<HTMLElement>('.le-outline')!
+    this.outline = new Outline(outlineContainer, this.projectIndex, (line) =>
+      revealLine(this.editor, line),
+    )
+    this.outline.update(this.currentFile)
 
     // Forward search (auto on cursor move, debounced)
     this.editor.onDidChangeCursorPosition(() => {
@@ -572,6 +586,7 @@ export class LatexEditor {
     if (this.currentFile.endsWith('.bib')) {
       this.updateBibIndex()
     }
+    this.outline.update(this.currentFile)
     this.runDiagnostics()
     this.emit('filechange', { path: this.currentFile, content })
     this.syncAndCompile()
@@ -620,6 +635,7 @@ export class LatexEditor {
       this.switchingModel = false
     }
     this.fileTree.setActive(path)
+    this.outline.update(path)
     this.runDiagnostics()
   }
 
@@ -705,6 +721,7 @@ export class LatexEditor {
     this.lastCompileErrors = result.errors
     setErrorMarkers(result.errors)
     this.updateAuxIndex()
+    this.outline.update(this.currentFile)
     this.runDiagnostics()
     // BibTeX takes priority over cross-ref recompile
     if (!this.pendingBibtex) {
