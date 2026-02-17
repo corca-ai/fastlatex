@@ -557,9 +557,13 @@ export class SynctexParser {
 
     // Nearest-line zigzag (reference: synctex_iterator_new_display lines 7510-7572)
     // Tries: line, line+1, line-1, line+2, line-2, ...
+    // Cap at ±3 lines — only compensate for macro-expansion line offsets,
+    // not preamble-to-body jumps.
+    const MAX_ZIGZAG_DISTANCE = 3
     let currentLine = line
     let lineOffset = 1
     for (let tries = 0; tries < 100; tries++) {
+      if (Math.abs(currentLine - line) > MAX_ZIGZAG_DISTANCE) break
       if (currentLine > 0) {
         const result = this.forwardForLine(data, inputTag, currentLine)
         if (result) return result

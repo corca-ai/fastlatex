@@ -321,10 +321,7 @@ export class PdfViewer {
   forwardSearch(file: string, line: number): void {
     let loc = this.synctexData
       ? this.synctexParser.forwardLookup(this.synctexData, file, line)
-      : null
-    if (!loc) {
-      loc = this.textMapper.forwardLookup(file, line)
-    }
+      : this.textMapper.forwardLookup(file, line)
     if (!loc) return
 
     // Find the page wrapper
