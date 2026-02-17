@@ -160,6 +160,20 @@ function runMain(programName, args) {
 }
 
 /* ------------------------------------------------------------------ */
+/* texmf.cnf — kpathsea needs this to find files in CWD + cache       */
+/* ------------------------------------------------------------------ */
+function writeTexmfCnf() {
+  var cnf = [
+    "% texmf.cnf for WASM BibTeX",
+    "BIBINPUTS = .;" + TEXCACHEROOT + "//",
+    "BSTINPUTS = .;" + TEXCACHEROOT + "//",
+    "TEXINPUTS = .;" + TEXCACHEROOT + "//",
+    ""
+  ].join("\n");
+  FS.writeFile(WORKROOT + "/texmf.cnf", cnf);
+}
+
+/* ------------------------------------------------------------------ */
 /* compileBibtexRoutine                                                */
 /* ------------------------------------------------------------------ */
 function compileBibtexRoutine() {
@@ -178,6 +192,8 @@ function compileBibtexRoutine() {
   /* kpathsea does lstat(argv[0]) to find the program directory.
      Write a dummy file so the lstat succeeds. */
   try { FS.writeFile(WORKROOT + "/bibtex", ""); } catch(e) {}
+
+  writeTexmfCnf();
 
   _setMainEntry(allocateString(self.mainfile));
 
