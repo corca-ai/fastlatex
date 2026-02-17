@@ -510,6 +510,7 @@ bibtex-wasm-compile: bibtex-wasm-prep
 		-I$(BUILD_WASM)/texk \
 		bibtex.c \
 		$(WEB2C_LIB_SOURCES) \
+		$(WEB2C_SRC)/lib/main.c \
 		$(BIBTEX_ENTRY) \
 		$(KPSE_HOOK) \
 		$$(find $(BUILD_WASM) -name 'libkpathsea.a' | head -1) \
