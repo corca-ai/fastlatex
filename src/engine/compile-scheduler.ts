@@ -17,7 +17,7 @@ export class CompileScheduler {
   constructor(
     private engine: { compile(): Promise<CompileResult>; isReady(): boolean },
     private onResult: (result: CompileResult) => void,
-    private onStatusChange: (status: 'compiling') => void,
+    private onStatusChange: (status: import('../types').AppStatus, detail?: string) => void,
     { minDebounceMs = 150, maxDebounceMs = 1000 } = {},
   ) {
     this.minDebounceMs = minDebounceMs

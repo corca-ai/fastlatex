@@ -47,10 +47,27 @@ export interface LatexEditorOptions {
   serviceWorker?: boolean
   /** Base URL for WASM/static assets. Defaults to `import.meta.env.BASE_URL`. */
   assetBaseUrl?: string
+  /**
+   * If true, only the Monaco editor is rendered in the container.
+   * Host is responsible for rendering sidebar, viewer, and logs.
+   * Defaults to false for backward compatibility.
+   */
+  headless?: boolean
 }
 
 export interface LatexEditorEventMap {
+  /** Triggered when a compilation finishes */
   compile: { result: CompileResult }
+  /** Triggered when file content changes */
   filechange: { path: string; content: string | Uint8Array }
-  status: { status: AppStatus }
+  /** Triggered when editor status changes */
+  status: { status: AppStatus; detail?: string }
+  /** Triggered when the set of files in the project changes (created/deleted) */
+  filesUpdate: { files: string[] }
+  /** Triggered when the document outline (sections) is updated */
+  outlineUpdate: { sections: import('./lsp/types').SectionDef[] }
+  /** Triggered when cursor position changes */
+  cursorChange: { path: string; line: number; column: number }
+  /** Triggered when LSP diagnostics (errors/warnings) are updated */
+  diagnostics: { diagnostics: TexError[] }
 }
