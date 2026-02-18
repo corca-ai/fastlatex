@@ -2,7 +2,7 @@ name: WASM Build
 on:
   workflow_dispatch:
   push:
-    branches: [main, 'iter4-*', 'feat/semantic-trace']
+    branches: [main, 'iter4-*', 'feat/semantic-trace', 'feat/texlive-2025-upgrade']
     paths: ['wasm-build/**']
 
 jobs:
