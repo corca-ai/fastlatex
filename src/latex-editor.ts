@@ -210,6 +210,12 @@ export class LatexEditor {
       this.projectIndex.removeFile(path)
     }
 
+    this.engine.flushCache()
+
+    this.bibtexEngine?.terminate()
+
+    this.bibtexEngine = null
+
     this.updateModels(files, oldPaths, newPaths)
 
     this.updateBibIndex()
@@ -547,6 +553,8 @@ export class LatexEditor {
 
         <div class="le-error-log" id="error-log-panel"></div>
 
+        <div class="le-status-bar"><span id="status">Ready</span></div>
+
       `
     }
 
@@ -829,6 +837,26 @@ export class LatexEditor {
       const label = detail ? `${labels[status]} ${detail}` : labels[status]
 
       this.pdfViewer.setLoadingStatus(label)
+    }
+
+    const statusEl = this.root.querySelector('#status')
+
+    if (statusEl) {
+      const labels: Record<AppStatus, string> = {
+        unloaded: 'Initializing...',
+
+        loading: 'Loading engine...',
+
+        ready: 'Ready',
+
+        compiling: 'Compiling...',
+
+        error: 'Error',
+
+        rendering: 'Rendering PDF...',
+      }
+
+      statusEl.textContent = detail ? `${labels[status]} ${detail}` : labels[status]
     }
 
     const payload: { status: AppStatus; detail?: string } = { status }

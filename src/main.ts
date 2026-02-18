@@ -9,4 +9,5 @@ editor.init().then(() => {
   ;(globalThis as Record<string, unknown>).__engine = (editor as any).engine
   ;(globalThis as Record<string, unknown>).__pdfViewer = editor.getViewer()
   ;(globalThis as Record<string, unknown>).__editor = editor.getMonacoEditor()
+  ;(globalThis as Record<string, unknown>).__latexEditor = editor
 })

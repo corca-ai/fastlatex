@@ -226,6 +226,11 @@ export class SwiftLatexEngine extends BaseWorkerEngine<WorkerMessage> {
     this.worker!.postMessage({ cmd: 'setmainfile', url: path })
   }
 
+  async flushCache(): Promise<void> {
+    this.checkInitialized()
+    this.worker!.postMessage({ cmd: 'flushcache' })
+  }
+
   async compile(): Promise<CompileResult> {
     this.checkReady()
     this.status = 'compiling'

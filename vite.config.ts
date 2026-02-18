@@ -16,8 +16,13 @@ export default defineConfig(({ mode }) => {
           },
           cssFileName: 'style',
           rollupOptions: {
+            external: [/^monaco-editor/, /^pdfjs-dist/],
             output: {
               assetFileNames: '[name][extname]',
+              globals: {
+                'monaco-editor': 'monaco',
+                'pdfjs-dist': 'pdfjsLib',
+              },
             },
           },
         }

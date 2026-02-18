@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 
-const APP_URL = 'http://localhost:5555'
+const APP_URL = 'http://localhost:5173'
 
 test.describe('Iteration 2 Verification', () => {
   test.beforeEach(async ({ page }) => {

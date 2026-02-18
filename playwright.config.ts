@@ -4,7 +4,7 @@ export default defineConfig({
   testDir: './e2e',
   timeout: 60_000,
   use: {
-    baseURL: 'http://localhost:5555',
+    baseURL: 'http://localhost:5180',
     headless: true,
   },
 })

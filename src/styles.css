@@ -98,6 +98,10 @@ body {
   height: 150px;
 }
 
+.le-status-bar {
+  display: none;
+}
+
 .le-error-log .log-header {
   display: flex;
   align-items: center;

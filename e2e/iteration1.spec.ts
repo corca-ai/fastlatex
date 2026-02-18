@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 
-const APP_URL = 'http://localhost:5555'
+const APP_URL = 'http://localhost:5173'
 
 // Iteration 1 verification: 4 acceptance criteria
 

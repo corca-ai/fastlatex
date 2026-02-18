@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 
 test('Cmd+click on PDF text jumps to source line', async ({ page }) => {
-  await page.goto('http://localhost:5555')
+  await page.goto('http://localhost:5173')
   await expect(page.locator('#status')).toHaveText('Ready', { timeout: 30_000 })
   await expect(page.locator('.pdf-page-container canvas').first()).toBeVisible({ timeout: 10_000 })
 

@@ -27,7 +27,8 @@
     "download-engine": "bash scripts/download-engine.sh",
     "build:lib": "BUILD_MODE=lib vite build"
   },
-  "dependencies": {
+  "dependencies": {},
+  "peerDependencies": {
     "monaco-editor": "^0.52.0",
     "pdfjs-dist": "^4.9.155"
   },
@@ -37,6 +38,8 @@
     "@typescript/native-preview": "^7.0.0-dev.20260213.1",
     "jscpd": "^4.0.8",
     "lefthook": "^2.1.1",
+    "monaco-editor": "^0.52.0",
+    "pdfjs-dist": "^4.9.155",
     "typescript": "^5.7.0",
     "vite": "^6.0.0",
     "vitest": "^4.0.18"
