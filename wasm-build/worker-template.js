@@ -389,6 +389,12 @@ var texlive200_cache = {};
 
 function kpse_find_file_impl(nameptr, format, _mustexist) {
     var reqname = UTF8ToString(nameptr);
+    
+    // Strip leading '*' or '&' — INITEX/fmt loader prefixes.
+    if (reqname.startsWith("*") || reqname.startsWith("&")) {
+        reqname = reqname.substring(1);
+    }
+
     // Only fetch bare filenames, not paths
     if (reqname.includes("/")) {
         return 0;
