@@ -16,8 +16,6 @@ npm install @google/latex-editor
 
 ## Basic Integration
 
-The simplest way to use the editor is to provide a container element and initial files.
-
 ```typescript
 import { LatexEditor } from 'latex-editor'
 import 'latex-editor/style.css'
@@ -25,11 +23,24 @@ import 'latex-editor/style.css'
 const container = document.getElementById('editor-container')!
 const editor = new LatexEditor(container, {
   files: {
-    'main.tex': '\documentclass{article}\begin{document}Hello world!\end{document}'
+    'main.tex': '\\documentclass{article}\\begin{document}Hello world!\\end{document}'
   }
 })
 
 await editor.init()
+```
+
+### Options
+
+```typescript
+new LatexEditor(container, {
+  texliveUrl?: string,        // TexLive server endpoint (default: auto-detect)
+  mainFile?: string,           // Main TeX file name (default: 'main.tex')
+  files?: Record<string, string | Uint8Array>,  // Initial project files
+  serviceWorker?: boolean,     // Cache texlive packages via SW (default: true)
+  assetBaseUrl?: string,       // Base URL for WASM assets
+  headless?: boolean,          // Only render Monaco (no sidebar/viewer)
+})
 ```
 
 ## Advanced Features

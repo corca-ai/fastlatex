@@ -7,108 +7,24 @@ Browser-based LaTeX editor with real-time PDF preview. Monaco editor + pdfTeX WA
 ## Mission
 
 To provide a high-performance, **embeddable LaTeX component** that outperforms existing solutions. Designed specifically for integration into host applications (academic platforms, CMS, collaboration tools), it focuses on four pillars:
-- **(A) Immediate Response**: 30–80ms keystroke-to-screen feedback.
+- **(A) Immediate Response**: 100–200ms keystroke-to-screen feedback.
 - **(B) Authority Engine**: Accurate compilation using native pdfTeX via WASM.
 - **(C) Seamless Mapping**: Bidirectional source-to-view synchronization (SyncTeX).
 - **(D) Cloud Package System**: On-demand access to the full TeX Live distribution.
 
 ## Features
 
-- Live LaTeX editing with syntax highlighting (Monaco)
-- Real-time PDF preview (PDF.js)
-- Bidirectional SyncTeX navigation — click PDF to jump to source, cursor movement highlights PDF location
-- pdfTeX 1.40.22 running entirely in the browser via WebAssembly
-- LaTeX package support via CloudFront CDN (on-demand fetch + service worker cache)
-- Virtual filesystem for multi-file projects
-- Inline error markers and error log panel
-- Embeddable component API — `new LatexEditor(container)` one-liner
+- **Real-time PDF Preview**: Live LaTeX editing with syntax highlighting (Monaco) and PDF.js viewer.
+- **Bidirectional SyncTeX**: Click PDF to jump to source, or navigate source to highlight PDF positions.
+- **Client-Side TeX Engine**: pdfTeX 1.40.22 running entirely in the browser via WebAssembly.
+- **On-Demand Packages**: LaTeX packages fetched from CloudFront CDN and cached via Service Worker.
+- **LSP Support**: Intelligent completion, diagnostics, and project-wide renaming (F2).
+- **Embeddable SDK**: Designed as a single-class API for integration into any web application.
 
-## Quick Start
+## Documentation
 
-```bash
-npm install
-npm run dev
-# → http://localhost:5173
-```
-
-TeX packages (amsmath, geometry, etc.) are fetched on demand from CloudFront CDN — no server setup needed.
-
-## Embedding
-
-`LatexEditor` is a single-class API designed for embedding into host applications.
-
-**Note:** `monaco-editor` and `pdfjs-dist` are peer dependencies. Ensure they are installed in your project.
-
-```typescript
-import { LatexEditor } from 'latex-editor'
-import 'latex-editor/style.css'
-
-const editor = new LatexEditor(document.getElementById('container')!, {
-  files: {
-    'main.tex': '\\documentclass{article}\n\\begin{document}\nHello!\n\\end{document}\n',
-  },
-})
-
-await editor.init()
-```
-
-For detailed integration instructions, see **[docs/howto.md](docs/howto.md)**.
-
-### Options
-
-```typescript
-new LatexEditor(container, {
-  texliveUrl?: string,        // TexLive server endpoint (default: auto-detect)
-  mainFile?: string,           // Main TeX file name (default: 'main.tex')
-  files?: Record<string, string | Uint8Array>,  // Initial project files
-  serviceWorker?: boolean,     // Cache texlive packages via SW (default: true)
-  assetBaseUrl?: string,       // Base URL for WASM assets
-  headless?: boolean,          // Only render Monaco (no sidebar/viewer)
-})
-```
-
-### API
-
-```typescript
-// Lifecycle
-await editor.init()          // Load WASM engine and run initial compile
-editor.dispose()             // Tear down everything
-
-// Project management
-editor.loadProject({ 'main.tex': '...', 'refs.bib': '...' })
-editor.saveProject()         // → Record<string, string | Uint8Array>
-editor.setFile('main.tex', content)
-editor.getFile('main.tex')   // → string | Uint8Array | null
-editor.deleteFile('ch1.tex')
-editor.listFiles()           // → string[]
-editor.flushCache()          // Clear engine VFS cache
-
-// Compilation
-editor.compile()             // Manual compile trigger
-editor.getPdf()              // Last compiled PDF as Uint8Array
-
-// Navigation
-editor.revealLine(10, 'main.tex')
-
-// Events
-editor.on('compile', (e) => { /* e.result: CompileResult */ })
-editor.on('status', (e) => { /* e.status, e.detail */ })
-editor.on('diagnostics', (e) => { /* e.diagnostics: TexError[] */ })
-editor.on('outlineUpdate', (e) => { /* e.sections */ })
-editor.off('compile', handler)
-
-// Escape hatches
-editor.getMonacoEditor()     // Monaco IStandaloneCodeEditor
-editor.getViewer()           // PdfViewer instance (undefined in headless)
-```
-
-### Library Build
-
-```bash
-npm run build:lib
-```
-
-Produces `dist/latex-editor.js` and `dist/latex-editor.css`. See [`examples/embed.html`](examples/embed.html) for a minimal integration example.
+- **[Integration Guide (docs/howto.md)](docs/howto.md)**: Learn how to install and embed the editor into your application, use Headless mode, and reference the full API.
+- **[Contributor Guide (docs/develop.md)](docs/develop.md)**: Details on internal architecture, building the WASM engine, and setting up the development environment.
 
 ## Architecture
 
@@ -134,48 +50,14 @@ Vanilla TypeScript + Vite. No framework. Designed as an embeddable component —
 - **Server Fallback**: Automatic handover to server-side engines for documents exceeding WASM memory/time limits.
 - **Collaborative Core**: Hooks for CRDT/OT integration to support real-time multi-user editing.
 
-## Development
-
-See [docs/develop.md](docs/develop.md) for the full development guide, including:
-
-- WASM engine setup (download or build from source with SyncTeX)
-- TexLive CDN configuration and version constraints
-- Testing (unit + E2E)
-- Troubleshooting
-
-### Commands
-
-| Command | Description |
-|---------|-------------|
-| `npm run dev` | Vite dev server |
-| `npm run build` | Type check + production build |
-| `npm run build:lib` | Library build (ES module + CSS) |
-| `npm run test` | Unit tests (Vitest) |
-| `npm run test:e2e` | E2E tests (Playwright) |
-| `npm run check` | Type check only (tsgo) |
-| `npm run lint` | Lint (Biome) |
-
-### Key Files
-
-| Path | Description |
-|------|-------------|
-| `src/latex-editor.ts` | Main component class |
-| `src/index.ts` | Library entry point (barrel export) |
-| `src/engine/swiftlatex-engine.ts` | WASM engine wrapper |
-| `src/fs/virtual-fs.ts` | In-memory virtual filesystem |
-| `src/viewer/pdf-viewer.ts` | PDF rendering + SyncTeX navigation |
-| `src/synctex/synctex-parser.ts` | SyncTeX binary parser |
-| `src/editor/setup.ts` | Monaco editor setup + LaTeX language |
-| `scripts/sync-texlive-s3.sh` | Extract TeX Live files for S3 upload (no Docker) |
-
 ## Tech Stack
 
-- **TypeScript** + **Vite** — build and dev server
-- **Monaco Editor** — code editing
-- **PDF.js** — PDF rendering
-- **pdfTeX 1.40.22** — TeX engine compiled to WASM (Emscripten)
-- **Vitest** + **Playwright** — unit and E2E testing
-- **Biome** — linting and formatting
+- **TypeScript** + **Vite** — Build and dev server.
+- **Monaco Editor** — Code editing and language services.
+- **PDF.js** — High-performance PDF rendering.
+- **pdfTeX 1.40.22** — Native TeX engine compiled to WASM.
+- **Vitest** + **Playwright** — Comprehensive testing suite.
+- **Biome** — Linting and formatting.
 
 ## License
 
