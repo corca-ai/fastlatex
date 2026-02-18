@@ -12,3 +12,4 @@ trigger fix Makefile
 trigger extreme memory
 trigger fix syntax
 trigger balanced memory
+trigger etex enable

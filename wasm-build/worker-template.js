@@ -550,8 +550,9 @@ function compileLaTeXRoutine() {
         try { FS.unlink(WORKROOT + "/pdflatex.fmt"); } catch(e) {}
 
         console.log("[compile] Invoking INITEX to build base format...");
-        // Use standard ini call without * prefix
-        var fmtStatus = runMain("pdfetex", ["-ini", "-interaction=nonstopmode", "pdflatex.ini"]);
+        // Re-add * prefix to enable e-TeX extensions (required by modern LaTeX)
+        // My JS fetcher fix will strip this '*' when downloading from S3.
+        var fmtStatus = runMain("pdfetex", ["-ini", "-interaction=nonstopmode", "*pdflatex.ini"]);
         console.log("[compile] INITEX finished with status: " + fmtStatus);
 
         if (fmtStatus === 0) {
