@@ -8,7 +8,7 @@ describe('parseLatexFile', () => {
       const result = parseLatexFile('\\label{fig:test}', 'main.tex')
       expect(result.labels).toHaveLength(1)
       expect(result.labels[0]!.name).toBe('fig:test')
-      expect(result.labels[0]!.location).toEqual({ file: 'main.tex', line: 1, column: 1 })
+      expect(result.labels[0]!.location).toEqual({ file: 'main.tex', line: 1, column: 8 })
     })
 
     it('extracts multiple labels on different lines', () => {
@@ -283,7 +283,7 @@ describe('parseLatexFile', () => {
       const result = parseLatexFile('\\bibitem{knuth84} Donald Knuth.', 'refs.tex')
       expect(result.bibItems).toHaveLength(1)
       expect(result.bibItems[0]!.key).toBe('knuth84')
-      expect(result.bibItems[0]!.location).toEqual({ file: 'refs.tex', line: 1, column: 1 })
+      expect(result.bibItems[0]!.location).toEqual({ file: 'refs.tex', line: 1, column: 10 })
     })
 
     it('extracts \\bibitem with optional arg', () => {

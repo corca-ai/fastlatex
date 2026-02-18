@@ -103,14 +103,46 @@ Use `editor.on(eventName, handler)` to listen for changes:
 
 - `compile`: Fired when a compilation cycle completes.
 - `status`: Fired when the editor status changes (e.g., `'compiling'`, `'ready'`, `'error'`).
+    - During `'loading'`, the `detail` field provides download progress (e.g., `'45%'`).
 - `filechange`: Fired when the content of a file is modified.
 - `filesUpdate`: Fired when files are added or deleted.
 - `cursorChange`: Fired when the user moves the cursor in the editor.
 - `diagnostics`: Fired when new LaTeX errors or warnings are detected.
 - `outlineUpdate`: Fired when the document structure (sections/subsections) changes.
 
-## Performance Tips
+## Editor Features
 
-- **Asset Base URL**: If you are hosting the WASM files and workers on a different path or CDN, specify `assetBaseUrl` in the options.
-- **Service Worker**: The editor uses a service worker to cache TeX packages fetched from the CDN. Ensure your hosting environment allows service workers if you want offline support and faster subsequent loads.
-- **Flush Cache**: When switching between completely different projects in the same session, call `editor.flushCache()` to ensure no stale files (like `.aux` or `.log`) from the previous project interfere with the new one.
+### Intelligent Rename (F2)
+The editor supports project-wide renaming of symbols. Press **F2** while the cursor is on a symbol to rename it and all its references:
+- **Labels**: Renaming a `\label{key}` will automatically update all corresponding `\ref{key}`, `\pageref{key}`, etc.
+- **Citations**: Renaming a citation key in a `.tex` file or a `.bib` file will update all `\cite{key}` references across the project.
+- **Commands**: Renaming a custom command defined with `\newcommand` or `\def`.
+
+## Performance & Assets
+
+### Asset Resolution (WASM & Workers)
+The editor requires several heavy assets to function:
+- `swiftlatexpdftex.wasm` / `swiftlatexpdftex.js`
+- `swiftlatexbibtex.wasm` / `swiftlatexbibtex.js`
+- `sw.js` (Service Worker)
+
+**Automatic Resolution (Recommended)**:
+By default, the editor automatically attempts to find these assets. It checks:
+1. Your build tool's base URL (e.g., Vite's `import.meta.env.BASE_URL`).
+2. The location where the library script itself is hosted (`import.meta.url`).
+
+In most modern setups (Vite, Webpack 5), **you don't need to set `assetBaseUrl` manually** as long as the assets are in your public directory.
+
+**Manual Configuration**:
+If you host assets on a specific CDN or a non-standard path, provide the `assetBaseUrl`:
+```typescript
+const editor = new LatexEditor(container, {
+  assetBaseUrl: 'https://cdn.example.com/assets/latex-editor/'
+})
+```
+
+### Service Worker
+The editor uses a service worker to cache TeX packages fetched from the CDN. 
+- If `assetBaseUrl` is automatically resolved, it will look for `sw.js` at that same base path.
+- Ensure your hosting environment allows service workers (served over HTTPS or localhost).
+- To disable: set `serviceWorker: false` in options.

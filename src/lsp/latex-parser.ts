@@ -56,18 +56,34 @@ function extractLabels(
   symbols: FileSymbols,
 ): void {
   for (const m of line.matchAll(LABEL_RE)) {
-    const name = extractBraceContent(line, m.index + m[0].length - 1)
-    if (name && !name.includes('#')) {
-      symbols.labels.push({ name, location: loc(filePath, lineNum, m.index + 1) })
+    const braceIdx = m.index + m[0].length - 1
+    const content = extractBraceContent(line, braceIdx)
+    if (content) {
+      const trimmed = content.trim()
+      if (trimmed && !trimmed.includes('#')) {
+        const offset = content.indexOf(trimmed)
+        symbols.labels.push({
+          name: trimmed,
+          location: loc(filePath, lineNum, braceIdx + offset + 2),
+        })
+      }
     }
   }
 }
 
 function extractRefs(line: string, filePath: string, lineNum: number, symbols: FileSymbols): void {
   for (const m of line.matchAll(REF_RE)) {
-    const name = extractBraceContent(line, m.index + m[0].length - 1)
-    if (name) {
-      symbols.labelRefs.push({ name, location: loc(filePath, lineNum, m.index + 1) })
+    const braceIdx = m.index + m[0].length - 1
+    const content = extractBraceContent(line, braceIdx)
+    if (content) {
+      const trimmed = content.trim()
+      if (trimmed) {
+        const offset = content.indexOf(trimmed)
+        symbols.labelRefs.push({
+          name: trimmed,
+          location: loc(filePath, lineNum, braceIdx + offset + 2),
+        })
+      }
     }
   }
 }
@@ -79,16 +95,20 @@ function extractCitations(
   symbols: FileSymbols,
 ): void {
   for (const m of line.matchAll(CITE_RE)) {
-    const keys = extractBraceContent(line, m.index + m[0].length - 1)
+    const braceIdx = m.index + m[0].length - 1
+    const keys = extractBraceContent(line, braceIdx)
     if (keys) {
+      let currentOffset = braceIdx + 1
       for (const key of keys.split(',')) {
         const trimmed = key.trim()
         if (trimmed) {
+          const keyStart = key.indexOf(trimmed)
           symbols.citations.push({
             key: trimmed,
-            location: loc(filePath, lineNum, m.index + 1),
+            location: loc(filePath, lineNum, currentOffset + keyStart + 1),
           })
         }
+        currentOffset += key.length + 1 // +1 for comma
       }
     }
   }
@@ -119,9 +139,11 @@ function extractNewCommands(
   symbols: FileSymbols,
 ): void {
   for (const m of line.matchAll(NEWCOMMAND_RE)) {
+    const name = m[1]!
+    const nameIdx = line.indexOf(`\\${name}`, m.index)
     const def: CommandDef = {
-      name: m[1]!,
-      location: loc(filePath, lineNum, m.index + 1),
+      name,
+      location: loc(filePath, lineNum, nameIdx + 2), // +1 for \, +1 for 1-based
     }
     if (m[2]) def.argCount = Number.parseInt(m[2], 10)
     symbols.commands.push(def)
@@ -130,9 +152,11 @@ function extractNewCommands(
 
 function extractDefs(line: string, filePath: string, lineNum: number, symbols: FileSymbols): void {
   for (const m of line.matchAll(DEF_RE)) {
+    const name = m[1]!
+    const nameIdx = line.indexOf(`\\${name}`, m.index)
     symbols.commands.push({
-      name: m[1]!,
-      location: loc(filePath, lineNum, m.index + 1),
+      name,
+      location: loc(filePath, lineNum, nameIdx + 2),
     })
   }
 }
@@ -144,9 +168,11 @@ function extractDeclareMath(
   symbols: FileSymbols,
 ): void {
   for (const m of line.matchAll(DECLARE_MATH_RE)) {
+    const name = m[1]!
+    const nameIdx = line.indexOf(`\\${name}`, m.index)
     symbols.commands.push({
-      name: m[1]!,
-      location: loc(filePath, lineNum, m.index + 1),
+      name,
+      location: loc(filePath, lineNum, nameIdx + 2),
     })
   }
 }
@@ -158,9 +184,17 @@ function extractBibItems(
   symbols: FileSymbols,
 ): void {
   for (const m of line.matchAll(BIBITEM_RE)) {
-    const key = extractBraceContent(line, m.index + m[0].length - 1)
-    if (key) {
-      symbols.bibItems.push({ key, location: loc(filePath, lineNum, m.index + 1) })
+    const braceIdx = m.index + m[0].length - 1
+    const content = extractBraceContent(line, braceIdx)
+    if (content) {
+      const trimmed = content.trim()
+      if (trimmed) {
+        const offset = content.indexOf(trimmed)
+        symbols.bibItems.push({
+          key: trimmed,
+          location: loc(filePath, lineNum, braceIdx + offset + 2),
+        })
+      }
     }
   }
 }

@@ -42,12 +42,34 @@ function formatBytes(bytes: number): string {
 
 type EventHandler<T> = (event: T) => void
 
+/** Resolves the base URL for assets like WASM and workers. */
+function resolveAssetBase(provided?: string): string {
+  if (provided) return provided.endsWith('/') ? provided : `${provided}/`
+
+  // 1. Try Vite/build-time base URL
+  // @ts-ignore
+  const envBase = import.meta.env?.BASE_URL
+  if (envBase) return envBase.endsWith('/') ? envBase : `${envBase}/`
+
+  // 2. Try to derive from current script URL (useful for CDNs/bundled apps)
+  try {
+    const url = new URL(import.meta.url)
+    const path = url.pathname
+    const lastSlash = path.lastIndexOf('/')
+    return url.origin + path.substring(0, lastSlash + 1)
+  } catch {
+    return '/'
+  }
+}
+
 export class LatexEditor {
   // --- Options ---
 
   private mainFile: string
 
   private opts: LatexEditorOptions
+
+  private assetBaseUrl: string
 
   // --- DOM ---
 
@@ -80,6 +102,8 @@ export class LatexEditor {
   // --- Models (one per project file, kept alive for cross-file diagnostics) ---
 
   private models = new Map<string, Monaco.editor.ITextModel>()
+
+  private modelDisposables = new Map<string, Monaco.IDisposable>()
 
   // --- State ---
 
@@ -122,15 +146,23 @@ export class LatexEditor {
 
     this.currentFile = this.mainFile
 
+    this.assetBaseUrl = resolveAssetBase(this.opts.assetBaseUrl)
+
     // Create engine
 
-    const engineOpts: import('./engine/swiftlatex-engine').SwiftLatexEngineOptions = {}
-
-    if (this.opts.assetBaseUrl) engineOpts.assetBaseUrl = this.opts.assetBaseUrl
+    const engineOpts: import('./engine/swiftlatex-engine').SwiftLatexEngineOptions = {
+      assetBaseUrl: this.assetBaseUrl,
+    }
 
     if (this.opts.texliveUrl) engineOpts.texliveUrl = this.opts.texliveUrl
 
     this.engine = new SwiftLatexEngine(engineOpts)
+
+    this.engine.onProgress = (progress) => {
+      if (this.engine.getStatus() === 'loading') {
+        this.setStatus('loading', `${progress}%`)
+      }
+    }
 
     // Create VFS
 
@@ -472,6 +504,10 @@ export class LatexEditor {
 
     this.editor?.dispose()
 
+    for (const d of this.modelDisposables.values()) d.dispose()
+
+    this.modelDisposables.clear()
+
     for (const model of this.models.values()) model.dispose()
 
     this.models.clear()
@@ -498,6 +534,12 @@ export class LatexEditor {
       model = createFileModel(content, path)
 
       this.models.set(path, model)
+
+      const d = model.onDidChangeContent(() => {
+        this.onModelChange(path, model!.getValue())
+      })
+
+      this.modelDisposables.set(path, d)
     }
 
     return model
@@ -507,6 +549,10 @@ export class LatexEditor {
     const model = this.models.get(path)
 
     if (model) {
+      this.modelDisposables.get(path)?.dispose()
+
+      this.modelDisposables.delete(path)
+
       model.dispose()
 
       this.models.delete(path)
@@ -694,12 +740,6 @@ export class LatexEditor {
 
     editorContainer.appendChild(this.previewEl)
 
-    // Single change handler — works across all model switches
-
-    this.editorChangeDisposable = this.editor.onDidChangeModelContent(() => {
-      this.onEditorChange(this.editor.getValue())
-    })
-
     // Sync state when model changes (e.g. Goto Definition)
 
     this.editor.onDidChangeModel(() => {
@@ -796,17 +836,17 @@ export class LatexEditor {
     initPerfOverlay()
 
     // Suppress Monaco's internal "Canceled" promise rejections on model switch
-
+    // and custom RenameProvider rejections
     window.addEventListener('unhandledrejection', (e) => {
-      if (e.reason?.message === 'Canceled') e.preventDefault()
+      if (e.reason?.message === 'Canceled' || e.reason === 'You cannot rename this element.') {
+        e.preventDefault()
+      }
     })
 
     // Service Worker
 
     if (this.opts.serviceWorker !== false && 'serviceWorker' in navigator) {
-      const base = this.opts.assetBaseUrl ?? import.meta.env.BASE_URL
-
-      navigator.serviceWorker.register(`${base}sw.js`).catch((err) => {
+      navigator.serviceWorker.register(`${this.assetBaseUrl}sw.js`).catch((err) => {
         console.warn('SW registration failed:', err)
       })
     }
@@ -906,8 +946,9 @@ export class LatexEditor {
     }
   }
 
-  private onEditorChange(content: string): void {
-    if (this.previewEl && this.previewEl.style.display !== 'none') return
+  private onModelChange(path: string, content: string): void {
+    if (this.previewEl && this.previewEl.style.display !== 'none' && path === this.currentFile)
+      return
 
     perf.mark('total')
 
@@ -915,23 +956,25 @@ export class LatexEditor {
 
     this.bibtexDone = false
 
-    this.fs.writeFile(this.currentFile, content)
+    this.fs.writeFile(path, content)
 
-    if (this.currentFile.endsWith('.tex')) {
-      this.projectIndex.updateFile(this.currentFile, content)
+    if (path.endsWith('.tex')) {
+      this.projectIndex.updateFile(path, content)
     }
 
-    if (this.currentFile.endsWith('.bib')) {
+    if (path.endsWith('.bib')) {
       this.updateBibIndex()
     }
 
-    this.outline?.update(this.currentFile)
+    if (path === this.currentFile) {
+      this.outline?.update(path)
 
-    this.emitOutline()
+      this.emitOutline()
+    }
 
     this.runDiagnostics()
 
-    this.emit('filechange', { path: this.currentFile, content })
+    this.emit('filechange', { path, content })
 
     this.syncAndCompile()
   }
@@ -1255,9 +1298,9 @@ export class LatexEditor {
   private async ensureBibtexEngine(): Promise<BibtexEngine | null> {
     if (this.bibtexEngine) return this.bibtexEngine
 
-    const opts: { assetBaseUrl?: string; texliveUrl?: string } = {}
-
-    if (this.opts.assetBaseUrl) opts.assetBaseUrl = this.opts.assetBaseUrl
+    const opts: { assetBaseUrl?: string; texliveUrl?: string } = {
+      assetBaseUrl: this.assetBaseUrl,
+    }
 
     if (this.opts.texliveUrl) opts.texliveUrl = this.opts.texliveUrl
 

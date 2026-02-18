@@ -12,19 +12,27 @@ export function parseBibFile(content: string, filePath: string): BibEntry[] {
     // Skip non-entry types
     if (type === 'string' || type === 'preamble' || type === 'comment') continue
 
-    // Find line and column for the match index
+    // The key starts after the '@type{' part.
+    // match[0] is like `@article{artin,` or `@article { artin ,`
+    const openBraceIdx = match[0].indexOf('{')
+    const keyPartStart = match[0].indexOf(match[2]!, openBraceIdx)
+    const keyAbsoluteIndex = match.index + keyPartStart
+
+    // Find line and column for the keyAbsoluteIndex
     let offset = 0
     let lineNum = 1
     let colNum = 1
     for (let i = 0; i < lines.length; i++) {
       const lineLen = lines[i]!.length + 1 // +1 for newline
-      if (offset + lineLen > match.index) {
+      if (offset + lineLen > keyAbsoluteIndex) {
         lineNum = i + 1
-        colNum = match.index - offset + 1
+        colNum = keyAbsoluteIndex - offset + 1
         break
       }
       offset += lineLen
     }
+
+    // Extract fields from the entry body
 
     // Extract fields from the entry body
     const startIdx = match.index + match[0].length

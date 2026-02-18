@@ -232,4 +232,185 @@ export class ProjectIndex {
     }
     return undefined
   }
+
+  /** Find the symbol at a given position and its usage locations */
+  findSymbolAt(
+    filePath: string,
+    line: number,
+    column: number,
+  ): { name: string; type: 'label' | 'citation' | 'command' } | undefined {
+    const symbols = this.files.get(filePath)
+    if (!symbols) return undefined
+
+    return (
+      this.findLabelAt(symbols, line, column) ||
+      this.findCitationAt(symbols, line, column) ||
+      this.findCommandAt(symbols, line, column)
+    )
+  }
+
+  private findLabelAt(symbols: FileSymbols, line: number, column: number) {
+    for (const label of symbols.labels) {
+      if (
+        label.location.line === line &&
+        column >= label.location.column &&
+        column <= label.location.column + label.name.length
+      ) {
+        return { name: label.name, type: 'label' as const }
+      }
+    }
+    for (const ref of symbols.labelRefs) {
+      if (
+        ref.location.line === line &&
+        column >= ref.location.column &&
+        column <= ref.location.column + ref.name.length
+      ) {
+        return { name: ref.name, type: 'label' as const }
+      }
+    }
+    return undefined
+  }
+
+  private findCitationAt(symbols: FileSymbols, line: number, column: number) {
+    for (const ref of symbols.citations) {
+      if (
+        ref.location.line === line &&
+        column >= ref.location.column &&
+        column <= ref.location.column + ref.key.length
+      ) {
+        return { name: ref.key, type: 'citation' as const }
+      }
+    }
+    for (const item of symbols.bibItems) {
+      if (
+        item.location.line === line &&
+        column >= item.location.column &&
+        column <= item.location.column + item.key.length
+      ) {
+        return { name: item.key, type: 'citation' as const }
+      }
+    }
+    return undefined
+  }
+
+  private findCommandAt(symbols: FileSymbols, line: number, column: number) {
+    for (const cmd of symbols.commands) {
+      if (
+        cmd.location.line === line &&
+        column >= cmd.location.column &&
+        column <= cmd.location.column + cmd.name.length
+      ) {
+        return { name: cmd.name, type: 'command' as const }
+      }
+    }
+    return undefined
+  }
+
+  /** Find all occurrences of a symbol across the project */
+  findAllOccurrences(
+    name: string,
+    type: 'label' | 'citation' | 'command',
+  ): { filePath: string; line: number; column: number; length: number }[] {
+    const occurrences: { filePath: string; line: number; column: number; length: number }[] = []
+
+    for (const [path, symbols] of this.files.entries()) {
+      if (type === 'label') {
+        this.collectLabelOccurrences(symbols, path, name, occurrences)
+      } else if (type === 'citation') {
+        this.collectCitationOccurrences(symbols, path, name, occurrences)
+      } else if (type === 'command') {
+        this.collectCommandOccurrences(symbols, path, name, occurrences)
+      }
+    }
+
+    // Also check .bib files for citations
+    if (type === 'citation') {
+      for (const entry of this.bibEntries) {
+        if (entry.key === name) {
+          occurrences.push({
+            filePath: entry.location.file,
+            line: entry.location.line,
+            column: entry.location.column,
+            length: name.length,
+          })
+        }
+      }
+    }
+
+    return occurrences
+  }
+
+  private collectLabelOccurrences(
+    symbols: FileSymbols,
+    path: string,
+    name: string,
+    out: { filePath: string; line: number; column: number; length: number }[],
+  ) {
+    for (const label of symbols.labels) {
+      if (label.name === name) {
+        out.push({
+          filePath: path,
+          line: label.location.line,
+          column: label.location.column,
+          length: name.length,
+        })
+      }
+    }
+    for (const ref of symbols.labelRefs) {
+      if (ref.name === name) {
+        out.push({
+          filePath: path,
+          line: ref.location.line,
+          column: ref.location.column,
+          length: name.length,
+        })
+      }
+    }
+  }
+
+  private collectCitationOccurrences(
+    symbols: FileSymbols,
+    path: string,
+    name: string,
+    out: { filePath: string; line: number; column: number; length: number }[],
+  ) {
+    for (const ref of symbols.citations) {
+      if (ref.key === name) {
+        out.push({
+          filePath: path,
+          line: ref.location.line,
+          column: ref.location.column,
+          length: name.length,
+        })
+      }
+    }
+    for (const item of symbols.bibItems) {
+      if (item.key === name) {
+        out.push({
+          filePath: path,
+          line: item.location.line,
+          column: item.location.column,
+          length: name.length,
+        })
+      }
+    }
+  }
+
+  private collectCommandOccurrences(
+    symbols: FileSymbols,
+    path: string,
+    name: string,
+    out: { filePath: string; line: number; column: number; length: number }[],
+  ) {
+    for (const cmd of symbols.commands) {
+      if (cmd.name === name) {
+        out.push({
+          filePath: path,
+          line: cmd.location.line,
+          column: cmd.location.column,
+          length: name.length,
+        })
+      }
+    }
+  }
 }

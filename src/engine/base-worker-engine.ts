@@ -8,6 +8,8 @@ export abstract class BaseWorkerEngine<TMsg = unknown> {
   protected texliveUrl: string | null
   protected pendingResponses = new Map<string, (data: TMsg) => void>()
 
+  public onProgress?: (progress: number) => void
+
   constructor(enginePath: string, texliveUrl: string | null) {
     this.enginePath = enginePath
     this.texliveUrl = texliveUrl

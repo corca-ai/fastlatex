@@ -177,7 +177,28 @@ export class SwiftLatexEngine extends BaseWorkerEngine<WorkerMessage> {
 
   private async decompressGzipResponse(resp: Response): Promise<ArrayBuffer> {
     const ds = new DecompressionStream('gzip')
-    const decompressed = resp.body!.pipeThrough(ds)
+    const contentLength = Number.parseInt(resp.headers.get('Content-Length') || '0', 10)
+    let loaded = 0
+    const engine = this
+
+    // Wrap the response body to track download progress
+    const progressStream = new ReadableStream({
+      async start(controller) {
+        const reader = resp.body!.getReader()
+        for (;;) {
+          const { done, value } = await reader.read()
+          if (done) break
+          loaded += value.length
+          if (contentLength && engine.onProgress) {
+            engine.onProgress(Math.round((loaded / contentLength) * 100))
+          }
+          controller.enqueue(value)
+        }
+        controller.close()
+      },
+    })
+
+    const decompressed = progressStream.pipeThrough(ds)
     const reader = decompressed.getReader()
     const chunks: Uint8Array[] = []
     for (;;) {
