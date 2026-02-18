@@ -530,7 +530,12 @@ function compileLaTeXRoutine() {
 
     // Build format file on first compilation.
     if (!self._fmtData) {
+        console.log("[compile] No preloaded format. Clearing caches and building initial format...");
         prepareExecutionContext();
+        cleanDir(TEXCACHEROOT);
+        cleanDir(WORKROOT);
+        prepareExecutionContext();
+
         try { FS.writeFile(WORKROOT + "/pdfetex", ""); } catch(e) {}
         writeTexmfCnf();
 
@@ -944,11 +949,9 @@ self["onmessage"] = function(ev) {
     } else if (cmd === "setmainfile") {
         self.mainfile = data["url"];
     } else if (cmd === "loadformat") {
-        // Pre-load a format file (.fmt). The preloaded format was built by
-        // the same pdfTeX 1.40.22 WASM binary, so it's fully compatible.
-        // Set _fmtData directly to skip the slow format-build-from-scratch
-        // step, and mark as native to enable preamble caching.
+        // Pre-load a format file (.fmt).
         var fmtData = new Uint8Array(data["data"]);
+        console.log("[loadformat] received data, size: " + fmtData.length);
         self._fmtData = fmtData;
         self._fmtIsNative = true;
         self.postMessage({ "result": "ok", "cmd": "loadformat" });
