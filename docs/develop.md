@@ -1,191 +1,133 @@
 # Development Guide
 
+This guide is for developers contributing to the `latex-editor` codebase. If you just want to use the library, see [docs/howto.md](howto.md).
+
 ## Quick Start
 
 ```bash
-npm run download-engine   # first time only
-npm run dev
+npm run download-engine   # Download WASM engine (first time only)
+npm run dev               # Start dev server
 # App: http://localhost:5173
 ```
 
-TeX packages are fetched on demand from CloudFront CDN via Vite proxy (configured in `.env`, override with `.env.local`).
+TeX packages are fetched on demand from a CloudFront CDN. In development, requests to `/texlive/` are proxied to the CDN (configured via `.env`).
 
 ## Prerequisites
 
-- Node.js (v24+)
-- WASM engine files in `public/swiftlatex/` (`npm run download-engine`)
+- **Node.js**: v24+ recommended.
+- **WASM Assets**: Must be present in `public/swiftlatex/`.
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
-| `npm run dev` | Vite dev server (hot reload, port 5173) |
-| `npm run build` | Type check (`tsgo`) + production build |
-| `npm run build:lib` | Library build (ES module) |
-| `npm run preview` | Preview production build |
-| `npm run check` | TypeScript type check only (`tsgo --noEmit`) |
-| `npm run test` | Unit tests (vitest, single run) |
-| `npm run test:watch` | Unit tests in watch mode |
-| `npm run test:e2e` | E2E tests (Playwright) |
+| `npm run dev` | Vite dev server (port 5173) |
+| `npm run build` | Production build (SDK + standalone app) |
+| `npm run build:lib` | SDK-only build (ES module + CSS) |
+| `npm run check` | TypeScript type check (`tsgo --noEmit`) |
+| `npm run test` | Unit tests (Vitest) |
+| `npm run test:e2e` | End-to-end tests (Playwright) |
 | `npm run lint` | Lint check (Biome) |
-| `npm run lint:fix` | Auto-fix lint issues |
 | `npm run format` | Format code (Biome) |
-| `npm run download-engine` | Download/setup WASM engine |
+| `npm run download-engine` | Download and patch pre-built WASM engines |
 
 ## Architecture
 
+`LatexEditor` is designed as a **headless-first SDK**. The core logic is decoupled from the UI, allowing it to run as a full IDE or a background compilation service.
+
 ```
-Browser
-├── Monaco Editor (code editing)
-├── PDF.js (PDF rendering)
-├── SwiftLaTeX WASM Worker (pdfTeX 1.40.22)
-│     └── fetches packages on demand from CloudFront CDN
-└── BibTeX WASM Worker (separate binary)
-      └── runs bibtex chain: pdflatex → bibtex → pdflatex
+[ Host Application ]
+      ↓
+[ LatexEditor SDK ] (src/latex-editor.ts)
+      ├── [ VirtualFS ] (src/fs/virtual-fs.ts) - In-memory file management
+      ├── [ LSP Engine ] (src/lsp/) - Completion, Hover, Diagnostics, Rename
+      ├── [ Worker Orchestrator ] (src/engine/)
+      │     ├── pdfTeX Worker (WASM) - Core compilation + CDN fetching
+      │     └── BibTeX Worker (WASM) - Bibliography generation
+      └── [ UI Components ] (src/ui/, src/viewer/) - Optional (hidden in headless mode)
 ```
 
-- **No framework** — vanilla TypeScript + Vite
-- WASM engine runs in a Web Worker, communicates via `postMessage`
-- SyncTeX provides bidirectional PDF ↔ source navigation
-- All TeX Live packages (~120k files) served from S3/CloudFront on demand
+- **SDK Core**: Managed by `LatexEditor` class. Orchestrates VFS, LSP, and Engines.
+- **Workers**: WASM engines run in Web Workers to keep the main thread responsive.
+- **Communication**: Asynchronous via `postMessage`. A request-response protocol is implemented using unique message IDs.
+- **SyncTeX**: A binary parser (`src/synctex/`) processes `.synctex` files for bidirectional PDF ↔ Source navigation.
 
 ## Project Structure
 
 ```
 src/
-├── engine/           # WASM engine wrapper, compile scheduler
-├── editor/           # Monaco editor setup
-├── viewer/           # PDF.js viewer, page renderer
-├── synctex/          # SyncTeX parser + text-based fallback mapper
-├── lsp/              # LaTeX language services (completion, hover, diagnostics, etc.)
-├── fs/               # Virtual filesystem
-├── ui/               # File tree, error log, layout, error markers
-├── perf/             # Performance metrics + debug overlay
-├── index.ts          # Library entry point
-├── latex-editor.ts   # Component API (LatexEditor class)
-├── main.ts           # Standalone app entry point
-└── types.ts          # Shared types
+├── engine/           # WASM engine wrappers, compile scheduler, error parsing
+├── editor/           # Monaco editor setup & LaTeX/BibTeX language definitions
+├── viewer/           # PDF.js based viewer and SyncTeX highlighting
+├── synctex/          # SyncTeX binary parser & text-mapper fallback
+├── lsp/              # Language Service Providers (Rename, Refs, Hover, etc.)
+├── fs/               # Virtual filesystem (VirtualFS)
+├── ui/               # IDE UI components (FileTree, Outline, ErrorLog)
+├── perf/             # Performance tracking & debug overlay
+├── index.ts          # SDK Entry point (barrel export)
+├── latex-editor.ts   # SDK Main class (orchestrator)
+└── main.ts           # Standalone IDE entry point (index.html)
 
-public/swiftlatex/    # WASM engine files (not in git)
-wasm-build/           # pdfTeX WASM build pipeline (Docker)
-scripts/              # sync-texlive-s3.sh, download-engine.sh, etc.
-e2e/                  # Playwright E2E tests
-docs/                 # Documentation
+wasm-build/           # C/C++ source and Docker pipeline for pdfTeX WASM
+scripts/              # Build and setup scripts
+e2e/                  # Playwright integration tests
 ```
 
 ## Engine Setup
 
-The WASM engine files (`swiftlatexpdftex.js`, `.wasm`) must be in `public/swiftlatex/`.
+The editor requires `swiftlatexpdftex.wasm/js` and `swiftlatexbibtex.wasm/js`.
 
-### Option A: Download pre-built (fast)
-
+### Option A: Download (Recommended)
 ```bash
 npm run download-engine
 ```
+This script downloads pre-built binaries from the SwiftLaTeX project and **automatically applies patches** to support `readfile` commands and SyncTeX data extraction.
 
-Downloads from SwiftLaTeX GitHub releases. Does **not** include SyncTeX support.
+### Option B: Build from Source
+If you need to modify the underlying pdfTeX or BibTeX engine:
+1. Navigate to `wasm-build/`.
+2. Follow the `README.md` inside (requires Docker).
+3. Copy the resulting `dist/*` files to `public/swiftlatex/`.
 
-### Option B: Build from source with SyncTeX (slow)
+## TexLive & CDN
 
+Packages are fetched via synchronous XHR inside the WASM worker.
+
+- **CDN**: Served via CloudFront (`dwrg2en9emzif.cloudfront.net`).
+- **Structure**: Files are organized by TeX Live format IDs (e.g., `pdftex/26/` for `.sty` files).
+- **Caching**: A Service Worker (`public/sw.js`) caches these files locally to enable offline compilation and speed up subsequent runs.
+
+### URL Resolution Order
+The `texliveUrl` is determined as follows:
+1. `options.texliveUrl` passed to the constructor.
+2. `VITE_TEXLIVE_URL` environment variable.
+3. `${location.origin}${BASE_URL}texlive/` (default).
+
+## Testing
+
+### Unit Tests
+We use **Vitest**. Tests are located in `*.test.ts` files alongside the source code.
 ```bash
-cd wasm-build
-docker build --platform linux/amd64 -t pdftex-wasm .
-docker run --platform linux/amd64 -v "$(pwd)/dist:/dist" pdftex-wasm
-cp dist/swiftlatexpdftex.js dist/swiftlatexpdftex.wasm ../public/swiftlatex/
-# BibTeX WASM (also built automatically if Phase 1 includes --enable-bibtex):
-cp dist/swiftlatexbibtex.js dist/swiftlatexbibtex.wasm ../public/swiftlatex/
+npm run test
 ```
 
-<details><summary>Build time expectations</summary>
-
-Two-phase build, **extremely slow** on ARM Macs (QEMU x86_64 emulation).
-
-| Phase | ARM Mac (QEMU) | x86_64 Linux |
-|-------|---------------|--------------|
-| Phase 1: Native compile | ~40–75 min | ~7–12 min |
-| Phase 2: WASM compile | ~30–55 min | ~7–12 min |
-| **Total** | **~1.5–2.5 hours** | **~15–30 min** |
-
-Recommendation: run on x86_64 Linux or CI.
-
-</details>
-
-## TexLive Package Serving
-
-The WASM worker fetches LaTeX packages on demand during compilation via synchronous XHR.
-
-All packages are served from S3 via CloudFront:
-
-| Resource | Value |
-|----------|-------|
-| S3 bucket | `akcorca-texlive` (ap-northeast-2) |
-| CloudFront | `dwrg2en9emzif.cloudfront.net` |
-| Files | ~120,000 files, ~1.7 GB |
-
-### URL resolution
-
-The engine resolves the texlive URL in this order:
-
-1. `texliveUrl` option passed to `SwiftLatexEngine` / `LatexEditor`
-2. `VITE_TEXLIVE_URL` env var (baked into client at build time)
-3. `${location.origin}${BASE_URL}texlive/` (Vite proxy → `TEXLIVE_URL` from `.env`)
-
-### URL structure
-
-The worker requests files as `{texliveUrl}pdftex/{format}/{filename}`:
-
-| Format | Content | Example |
-|--------|---------|---------|
-| 3 | TFM font metrics | `pdftex/3/cmr10` |
-| 6 | BibTeX support files (.bib) | `pdftex/6/xampl.bib` |
-| 7 | BibTeX style files (.bst) | `pdftex/7/plain` |
-| 10 | Format files | `pdftex/10/swiftlatexpdftex.fmt` |
-| 11 | Font maps | `pdftex/11/pdftex.map` |
-| 26 | TeX sources (.sty, .cls, .def) | `pdftex/26/geometry.sty` |
-| 32 | PostScript fonts (.pfb) | `pdftex/32/cmr10.pfb` |
-| 33 | Virtual fonts | `pdftex/33/cmr10` |
-| 44 | Encoding files (.enc) | `pdftex/44/cm-super-ts1.enc` |
-
-Missing files must return 404 (not 403). The worker caches both hits and misses in memory.
-
-### Rebuilding the S3 content
-
+### E2E Tests
+We use **Playwright**. These verify the full compilation loop, SyncTeX, and BibTeX integration.
 ```bash
-./scripts/sync-texlive-s3.sh            # extract only
-./scripts/sync-texlive-s3.sh --upload   # extract + upload to S3
-```
-
-Downloads the TeX Live 2020 texmf tarball from CTAN, extracts into flat structure, uploads to S3. Caches tarball in `/tmp/texlive-s3/`.
-
-### Version constraint
-
-The WASM binary is pdfTeX **1.40.22**. Format files (`.fmt`) must match this exact version — Ubuntu 20.04's system `pdflatex.fmt` (built by 1.40.20) will not work.
-
-## Tests
-
-### Unit tests
-
-```bash
-npm run test          # single run
-npm run test:watch    # watch mode
-```
-
-Test files live next to source: `src/**/*.test.ts`
-
-### E2E tests
-
-```bash
+# Requires dev server running at port 5173
 npm run test:e2e
 ```
 
-E2E tests use Playwright and live in `e2e/`.
+## LSP Implementation Details
 
-## Troubleshooting
+### Project Index
+`ProjectIndex` maintains a global state of symbols (labels, citations, commands) across all files in the `VirtualFS`. It is updated on every keystroke (debounced).
 
-### WASM worker caches 404s
+### Rename (F2)
+Rename functionality uses `ProjectIndex.findAllOccurrences()` to find symbols in both `.tex` and `.bib` files. It handles:
+- `\label` ↔ `\ref`
+- `@article{key}` in `.bib` ↔ `\cite{key}` in `.tex`
+- `\newcommand{\cmd}` ↔ `\cmd` usages
 
-If a file was temporarily missing and the worker cached the 404, hard refresh (Cmd+Shift+R) to clear the worker's `texlive404_cache`.
-
-### l3backend errors
-
-Newer `l3backend` packages (2023+) require `\__kernel_dependency_version_check:nn` which doesn't exist in the pdfTeX 1.40.22 format. The S3 deployment ships TeX Live 2020's `l3backend-pdfmode.def` which has no version check.
+### Diagnostics
+Diagnostics are computed by `DiagnosticProvider` by cross-referencing the `ProjectIndex`. For example, it flags `\ref{key}` if `key` does not exist in any loaded file.
