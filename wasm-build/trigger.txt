@@ -2,3 +2,4 @@ trigger
 trigger debug
 trigger clean ini
 trigger clean build
+trigger network logs

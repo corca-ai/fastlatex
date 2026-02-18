@@ -412,7 +412,7 @@ function kpse_find_file_impl(nameptr, format, _mustexist) {
     xhr.timeout = 150000;
     xhr.responseType = "arraybuffer";
 
-    // console.log("Start downloading texlive file " + remote_url);
+    console.log("Start downloading texlive file " + remote_url);
 
     try {
         xhr.send();
@@ -484,7 +484,7 @@ function kpse_find_pk_impl(nameptr, dpi) {
     xhr.timeout = 150000;
     xhr.responseType = "arraybuffer";
 
-    // console.log("Start downloading PK font " + remote_url);
+    console.log("Start downloading PK font " + remote_url);
 
     try {
         xhr.send();
