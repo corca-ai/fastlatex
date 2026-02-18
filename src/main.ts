@@ -2,7 +2,20 @@ import { LatexEditor } from './latex-editor'
 import './styles.css'
 
 const container = document.getElementById('app')!
-const editor = new LatexEditor(container)
+let opts = (globalThis as any).__LATEX_EDITOR_OPTS || {}
+
+// Support manual extraction mode via localStorage
+if (localStorage.getItem('extract_mode') === 'true') {
+  console.log('[main] Manual extraction mode enabled')
+  opts = {
+    ...opts,
+    skipFormatPreload: true,
+    serviceWorker: false,
+    texliveUrl: 'https://dwrg2en9emzif.cloudfront.net/2025/',
+  }
+}
+
+const editor = new LatexEditor(container, opts)
 
 editor.init().then(() => {
   // E2E backward compat: expose globals

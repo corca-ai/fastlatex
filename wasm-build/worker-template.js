@@ -181,8 +181,8 @@ function cleanDir(dir) {
         }
     }
 
-    // Remove the directory itself (unless it's the root working dir)
-    if (dir !== WORKROOT) {
+    // Remove the directory itself (unless it's a root dir)
+    if (dir !== WORKROOT && dir !== TEXCACHEROOT) {
         try {
             FS.rmdir(dir);
         } catch(err) {

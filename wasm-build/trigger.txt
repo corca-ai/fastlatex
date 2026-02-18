@@ -5,3 +5,5 @@ trigger clean build
 trigger network logs
 trigger detailed network logs
 trigger fix ini prefix
+trigger fix cleanDir
+trigger fix cleanDir 2
