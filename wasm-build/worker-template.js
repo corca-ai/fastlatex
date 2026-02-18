@@ -218,22 +218,22 @@ function writeTexmfCnf() {
         "VFFONTS = .;" + TEXCACHEROOT + "//",
         "TEXFORMATS = .;" + TEXCACHEROOT + "//",
         "TEXPOOL = .;" + TEXCACHEROOT + "//",
-        "% Memory parameters (Significantly increased for TeX Live 2025)",
-        "main_memory = 30000000",
-        "extra_mem_top = 10000000",
-        "extra_mem_bot = 10000000",
-        "font_mem_size = 20000000",
-        "pool_size = 30000000",
-        "buf_size = 2000000",
-        "hash_extra = 2000000",
-        "save_size = 200000",
-        "stack_size = 20000",
-        "trie_size = 8000000",
-        "hyph_size = 32767",
-        "max_strings = 1000000",
-        "string_vacancies = 150000",
-        "nest_size = 5000",
-        "param_size = 20000",
+        "% Memory parameters (Optimized for TeX Live 2025)",
+        "main_memory = 8000000",
+        "extra_mem_top = 4000000",
+        "extra_mem_bot = 4000000",
+        "font_mem_size = 8000000",
+        "pool_size = 5000000",
+        "buf_size = 1000000",
+        "hash_extra = 1000000",
+        "save_size = 100000",
+        "stack_size = 10000",
+        "trie_size = 1000000",
+        "hyph_size = 8191",
+        "max_strings = 500000",
+        "string_vacancies = 100000",
+        "nest_size = 500",
+        "param_size = 10000",
         ""
     ].join("\n");
     FS.writeFile(WORKROOT + "/texmf.cnf", texmfCnf);
@@ -550,7 +550,8 @@ function compileLaTeXRoutine() {
         try { FS.unlink(WORKROOT + "/pdflatex.fmt"); } catch(e) {}
 
         console.log("[compile] Invoking INITEX to build base format...");
-        var fmtStatus = runMain("pdfetex", ["-ini", "-interaction=nonstopmode", "*pdflatex.ini"]);
+        // Use standard ini call without * prefix
+        var fmtStatus = runMain("pdfetex", ["-ini", "-interaction=nonstopmode", "pdflatex.ini"]);
         console.log("[compile] INITEX finished with status: " + fmtStatus);
 
         if (fmtStatus === 0) {
@@ -565,9 +566,13 @@ function compileLaTeXRoutine() {
         } else {
             console.error("[compile] Initial format build failed. log below:");
             console.log(self.memlog);
-            if (self._fmtFallback) {
-                self._fmtData = self._fmtFallback;
-            }
+            self.postMessage({
+                "result": "failed",
+                "status": fmtStatus,
+                "log": self.memlog,
+                "cmd": "compile"
+            });
+            return; // STOP HERE
         }
         prepareExecutionContext();
         try { FS.writeFile(WORKROOT + "/pdflatex", ""); } catch(e) {}
