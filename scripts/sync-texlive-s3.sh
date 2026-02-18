@@ -13,8 +13,8 @@
 
 set -euo pipefail
 
-TEXLIVE_YEAR=2020
-TEXMF_TARBALL="texlive-20200406-texmf.tar.xz"
+TEXLIVE_YEAR=2025
+TEXMF_TARBALL="texlive-20250308-texmf.tar.xz"
 TEXMF_URL="https://ftp.math.utah.edu/pub/tex/historic/systems/texlive/${TEXLIVE_YEAR}/${TEXMF_TARBALL}"
 
 S3_BUCKET="${S3_BUCKET:-akcorca-texlive}"
@@ -32,6 +32,7 @@ for arg in "$@"; do
 done
 
 OUT_DIR="$WORK_DIR/pdftex"
+S3_PATH="s3://$S3_BUCKET/$TEXLIVE_YEAR/pdftex/"
 
 # --- Step 1: Get texmf-dist ---
 
@@ -129,13 +130,13 @@ echo "Total: $total files ($size) in $OUT_DIR"
 
 if [ "$DO_UPLOAD" = true ]; then
   echo ""
-  echo "Uploading to s3://$S3_BUCKET/pdftex/ ..."
-  aws s3 sync "$OUT_DIR/" "s3://$S3_BUCKET/pdftex/" --size-only
+  echo "Uploading to $S3_PATH ..."
+  aws s3 sync "$OUT_DIR/" "$S3_PATH" --size-only
   echo "Done."
 else
   echo ""
   echo "Dry run complete. To upload:"
   echo "  $0 --upload"
   echo "  # or manually:"
-  echo "  aws s3 sync $OUT_DIR/ s3://$S3_BUCKET/pdftex/ --size-only"
+  echo "  aws s3 sync $OUT_DIR/ $S3_PATH --size-only"
 fi

@@ -2,7 +2,7 @@
 # Dockerfile: pdfTeX WASM with SyncTeX — Build Environment
 # =============================================================================
 #
-# Builds pdfTeX 1.40.21 as a WebAssembly module using Emscripten, with SyncTeX
+# Builds pdfTeX 1.40.27 as a WebAssembly module using Emscripten, with SyncTeX
 # support enabled. The output is a .wasm binary and .js loader that can replace
 # the stock SwiftLaTeX pdfTeX WASM in the editor.
 #
@@ -25,7 +25,7 @@
 FROM emscripten/emsdk:3.1.46
 
 LABEL maintainer="latex-editor"
-LABEL description="pdfTeX WASM build environment with SyncTeX support"
+LABEL description="pdfTeX WASM build environment with SyncTeX support (TeX Live 2025)"
 
 # Use bash with pipefail for proper error propagation
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
@@ -48,9 +48,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # ---- TeX Live source --------------------------------------------------------
-# pdfTeX 1.40.21 is in TeX Live 2020 (branch2020.0).
-RUN echo "=== Cloning TeX Live 2020 source (pdfTeX 1.40.21) ===" && \
-    git clone --depth=1 --branch branch2020.0 \
+# pdfTeX 1.40.27 is in TeX Live 2025 (branch2025).
+RUN echo "=== Cloning TeX Live 2025 source (pdfTeX 1.40.27) ===" && \
+    git clone --depth=1 --branch branch2025 \
         https://github.com/TeX-Live/texlive-source.git \
         /src/texlive-source && \
     echo "=== Source checkout complete ==="

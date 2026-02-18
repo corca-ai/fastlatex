@@ -24,7 +24,7 @@ echo "  pdfTeX WASM Build — with SyncTeX Support"
 echo "============================================================"
 echo ""
 echo "  Emscripten version: $(emcc --version | head -1)"
-echo "  Source:             TeX Live 2020 (pdfTeX 1.40.21)"
+echo "  Source:             TeX Live 2025 (pdfTeX 1.40.27)"
 echo "  SyncTeX:            enabled"
 echo ""
 
