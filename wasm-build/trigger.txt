@@ -9,3 +9,4 @@ trigger fix cleanDir
 trigger fix cleanDir 2
 trigger memory increase
 trigger fix Makefile
+trigger extreme memory
