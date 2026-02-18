@@ -4,6 +4,14 @@ Browser-based LaTeX editor with real-time PDF preview. Monaco editor + pdfTeX WA
 
 **[Live Demo](https://akcorca.github.io/latex-editor/)**
 
+## Mission
+
+To provide a high-performance, **embeddable LaTeX component** that outperforms existing solutions. Designed specifically for integration into host applications (academic platforms, CMS, collaboration tools), it focuses on four pillars:
+- **(A) Immediate Response**: 30–80ms keystroke-to-screen feedback.
+- **(B) Authority Engine**: Accurate compilation using native pdfTeX via WASM.
+- **(C) Seamless Mapping**: Bidirectional source-to-view synchronization (SyncTeX).
+- **(D) Cloud Package System**: On-demand access to the full TeX Live distribution.
+
 ## Features
 
 - Live LaTeX editing with syntax highlighting (Monaco)
@@ -108,6 +116,7 @@ Produces `dist/latex-editor.js` and `dist/latex-editor.css`. See [`examples/embe
 Browser
 ├── LatexEditor              — component API, orchestrates everything
 │   ├── Monaco Editor        — code editing, LaTeX syntax
+│   ├── LSP Engine           — completion, diagnostics, rename (F2)
 │   ├── PDF.js               — PDF rendering, zoom, page navigation
 │   ├── SyncTeX              — bidirectional PDF ↔ source mapping
 │   └── pdfTeX WASM Worker   — compilation in Web Worker
@@ -116,6 +125,14 @@ Browser
 ```
 
 Vanilla TypeScript + Vite. No framework. Designed as an embeddable component — the host application owns authentication, storage, and collaboration.
+
+## Roadmap
+
+- **TeX Live 2025 Upgrade**: Update WASM engines and S3 assets to the latest TeX Live.
+- **WebGPU LiveView**: Immediate preview using a custom PDL output driver and WebGPU renderer (bypassing PDF generation for sub-50ms latency).
+- **Large Document Optimization**: Partial compilation and incremental rendering for 100+ page documents.
+- **Server Fallback**: Automatic handover to server-side engines for documents exceeding WASM memory/time limits.
+- **Collaborative Core**: Hooks for CRDT/OT integration to support real-time multi-user editing.
 
 ## Development
 
