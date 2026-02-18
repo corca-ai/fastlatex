@@ -232,11 +232,8 @@ function writeTexmfCnf() {
         "hyph_size = 32767",
         "max_strings = 1000000",
         "string_vacancies = 150000",
-        ""
-        "nest_size = 500",
-        "param_size = 10000",
-        "max_strings = 500000",
-        "string_vacancies = 90000",
+        "nest_size = 5000",
+        "param_size = 20000",
         ""
     ].join("\n");
     FS.writeFile(WORKROOT + "/texmf.cnf", texmfCnf);
