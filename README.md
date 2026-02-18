@@ -29,6 +29,8 @@ TeX packages (amsmath, geometry, etc.) are fetched on demand from CloudFront CDN
 
 `LatexEditor` is a single-class API designed for embedding into host applications.
 
+**Note:** `monaco-editor` and `pdfjs-dist` are peer dependencies. Ensure they are installed in your project.
+
 ```typescript
 import { LatexEditor } from 'latex-editor'
 import 'latex-editor/style.css'
@@ -42,6 +44,8 @@ const editor = new LatexEditor(document.getElementById('container')!, {
 await editor.init()
 ```
 
+For detailed integration instructions, see **[docs/howto.md](docs/howto.md)**.
+
 ### Options
 
 ```typescript
@@ -51,6 +55,7 @@ new LatexEditor(container, {
   files?: Record<string, string | Uint8Array>,  // Initial project files
   serviceWorker?: boolean,     // Cache texlive packages via SW (default: true)
   assetBaseUrl?: string,       // Base URL for WASM assets
+  headless?: boolean,          // Only render Monaco (no sidebar/viewer)
 })
 ```
 
@@ -61,27 +66,32 @@ new LatexEditor(container, {
 await editor.init()          // Load WASM engine and run initial compile
 editor.dispose()             // Tear down everything
 
-// File management
+// Project management
 editor.loadProject({ 'main.tex': '...', 'refs.bib': '...' })
 editor.saveProject()         // → Record<string, string | Uint8Array>
 editor.setFile('main.tex', content)
 editor.getFile('main.tex')   // → string | Uint8Array | null
 editor.deleteFile('ch1.tex')
 editor.listFiles()           // → string[]
+editor.flushCache()          // Clear engine VFS cache
 
 // Compilation
 editor.compile()             // Manual compile trigger
 editor.getPdf()              // Last compiled PDF as Uint8Array
 
+// Navigation
+editor.revealLine(10, 'main.tex')
+
 // Events
 editor.on('compile', (e) => { /* e.result: CompileResult */ })
-editor.on('filechange', (e) => { /* e.path, e.content */ })
-editor.on('status', (e) => { /* e.status: AppStatus */ })
+editor.on('status', (e) => { /* e.status, e.detail */ })
+editor.on('diagnostics', (e) => { /* e.diagnostics: TexError[] */ })
+editor.on('outlineUpdate', (e) => { /* e.sections */ })
 editor.off('compile', handler)
 
 // Escape hatches
 editor.getMonacoEditor()     // Monaco IStandaloneCodeEditor
-editor.getViewer()           // PdfViewer instance
+editor.getViewer()           // PdfViewer instance (undefined in headless)
 ```
 
 ### Library Build
