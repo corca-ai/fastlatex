@@ -59,3 +59,7 @@ The editor uses a service worker to cache TeX packages fetched from the CDN.
 - If `assetBaseUrl` is automatically resolved, it will look for `sw.js` at that same base path.
 - Ensure your hosting environment allows service workers (served over HTTPS or localhost).
 - To disable: set `serviceWorker: false` in options.
+
+## Related Documents
+- [docs/texlive-upgrade.md](texlive-upgrade.md): Detailed internals and TeX Live upgrade guide.
+- [docs/architecture.md](architecture.md): System architecture overview.
