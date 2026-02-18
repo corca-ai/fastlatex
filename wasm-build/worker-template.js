@@ -441,11 +441,10 @@ function kpse_find_file_impl(nameptr, format, _mustexist) {
 
         texlive200_cache[cacheKey] = savepath;
         var ptr = allocateString(savepath);
+        console.log("[kpse] Downloaded: " + reqname + " (" + format + ")");
         return ptr;
-    } else if (xhr.status === 301 || xhr.status === 404) {
-        // 301: TexLive-Ondemand convention for "file not found"
-        // 404: static hosting (gh-pages) for missing files
-        // console.log("TexLive File not exists " + remote_url);
+    } else {
+        console.warn("[kpse] Failed: " + reqname + " (" + format + ") - status: " + xhr.status);
         texlive404_cache[cacheKey] = 1;
         return 0;
     }
@@ -500,9 +499,10 @@ function kpse_find_pk_impl(nameptr, dpi) {
         var savepath = TEXCACHEROOT + "/" + fileid;
         FS.writeFile(savepath, new Uint8Array(arraybuffer));
         pk200_cache[cacheKey] = savepath;
+        console.log("[kpse] Downloaded PK: " + reqname + " (" + dpi + ")");
         return allocateString(savepath);
-    } else if (xhr.status === 301 || xhr.status === 404) {
-        // console.log("PK Font not exists " + remote_url);
+    } else {
+        console.warn("[kpse] Failed PK: " + reqname + " (" + dpi + ") - status: " + xhr.status);
         pk404_cache[cacheKey] = 1;
         return 0;
     }
