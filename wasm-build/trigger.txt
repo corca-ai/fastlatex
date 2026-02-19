@@ -1,6 +1,0 @@
-trigger smarter extension retry
-trigger smarter extension retry 2
-trigger downloading notification
-trigger bibtex sync fix
-trigger bibtex sync fix 2
-trigger bibtex debug fix

@@ -1336,10 +1336,9 @@ export class LatexEditor {
 
     await this.sendFilesToBibtex(engine, mainBase, auxContent)
 
-    const bibtexResult = await engine.compile(mainBase)
+    await engine.compile(mainBase)
 
-    if (!bibtexResult.success) return
-
+    // Try to read .bbl even if BibTeX had errors (status 2)
     const bbl = await engine.readFile(`${mainBase}.bbl`)
 
     if (!bbl) {
