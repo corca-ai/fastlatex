@@ -602,7 +602,18 @@ export class LatexEditor {
 
         <div class="le-error-log" id="error-log-panel"></div>
 
-        <div class="le-status-bar"><span id="status">Ready</span></div>
+        <div class="le-status-bar">
+          <div class="le-status-info">
+            <span id="status">Ready</span>
+          </div>
+          <div class="le-version-info">
+            <label for="texlive-version">TeX Live:</label>
+            <select id="texlive-version" class="le-version-select">
+              <option value="2025">2025 (Latest)</option>
+              <option value="2020">2020 (Legacy)</option>
+            </select>
+          </div>
+        </div>
 
       `
     }
@@ -853,6 +864,28 @@ export class LatexEditor {
         console.warn('SW registration failed:', err)
       })
     }
+
+    this.initVersionSelector()
+  }
+
+  private initVersionSelector(): void {
+    const selector = this.root.querySelector<HTMLSelectElement>('#texlive-version')
+    if (!selector) return
+
+    // Set initial value
+    selector.value = this.opts.texliveVersion || '2025'
+
+    selector.addEventListener('change', () => {
+      const newVersion = selector.value as TexliveVersion
+      if (newVersion === this.opts.texliveVersion) return
+
+      // We need to reload to clean up WASM workers and re-init with new version
+      // In a real app, you might want to handle this more gracefully, but
+      // for a TeX engine swap, a reload is the safest path to avoid stale state.
+      const url = new URL(window.location.href)
+      url.searchParams.set('tl', newVersion)
+      window.location.href = url.toString()
+    })
   }
 
   // ------------------------------------------------------------------

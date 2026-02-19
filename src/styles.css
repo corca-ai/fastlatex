@@ -99,7 +99,41 @@ body {
 }
 
 .le-status-bar {
-  display: none;
+  height: 24px;
+  background: #007acc;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.le-version-info {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.le-version-select {
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  border: none;
+  border-radius: 2px;
+  font-size: 11px;
+  padding: 1px 4px;
+  cursor: pointer;
+  outline: none;
+}
+
+.le-version-select option {
+  background: #333;
+  color: white;
+}
+
+.le-version-select:hover {
+  background: rgba(255, 255, 255, 0.2);
 }
 
 .le-error-log .log-header {

@@ -3,7 +3,13 @@ import './styles.css'
 
 const container = document.getElementById('app')!
 
-const editor = new LatexEditor(container)
+const urlParams = new URLSearchParams(window.location.search)
+const tlParam = urlParams.get('tl') as any
+const texliveVersion = tlParam === '2020' || tlParam === '2025' ? tlParam : '2025'
+
+const editor = new LatexEditor(container, {
+  texliveVersion,
+})
 
 editor.init().then(() => {
   // E2E backward compat: expose globals
