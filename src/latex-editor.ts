@@ -18,6 +18,7 @@ import type {
   LatexEditorEventMap,
   LatexEditorOptions,
   TexError,
+  TexliveVersion,
 } from './types'
 import { ErrorLog } from './ui/error-log'
 import { setDiagnosticMarkers, setErrorMarkers } from './ui/error-markers'
@@ -153,6 +154,7 @@ export class LatexEditor {
     const engineOpts: import('./engine/swiftlatex-engine').SwiftLatexEngineOptions = {
       assetBaseUrl: this.assetBaseUrl,
       skipFormatPreload: !!this.opts.skipFormatPreload,
+      texliveVersion: this.opts.texliveVersion || '2025',
     }
 
     if (this.opts.texliveUrl) engineOpts.texliveUrl = this.opts.texliveUrl
@@ -1307,8 +1309,9 @@ export class LatexEditor {
   private async ensureBibtexEngine(): Promise<BibtexEngine | null> {
     if (this.bibtexEngine) return this.bibtexEngine
 
-    const opts: { assetBaseUrl?: string; texliveUrl?: string } = {
+    const opts: { assetBaseUrl?: string; texliveUrl?: string; texliveVersion?: TexliveVersion } = {
       assetBaseUrl: this.assetBaseUrl,
+      texliveVersion: this.opts.texliveVersion || '2025',
     }
 
     if (this.opts.texliveUrl) opts.texliveUrl = this.opts.texliveUrl

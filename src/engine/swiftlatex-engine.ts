@@ -1,8 +1,10 @@
-import type { CompileResult } from '../types'
+import type { CompileResult, TexliveVersion } from '../types'
 import { BaseWorkerEngine, resolveTexliveUrl } from './base-worker-engine'
 import { parseTexErrors } from './parse-errors'
 
 export interface SwiftLatexEngineOptions {
+  /** TeX Live version to use. Defaults to '2025'. */
+  texliveVersion?: TexliveVersion
   /** Base URL for WASM assets. Defaults to `import.meta.env.BASE_URL`. */
   assetBaseUrl?: string
   /** TexLive server endpoint. Defaults to `${location.origin}${BASE_URL}texlive/`. */
@@ -44,12 +46,15 @@ interface WorkerMessage {
 export class SwiftLatexEngine extends BaseWorkerEngine<WorkerMessage> {
   private formatPath: string
   private skipFormatPreload: boolean
+  private version: TexliveVersion
 
   constructor(options?: SwiftLatexEngineOptions) {
     const base = options?.assetBaseUrl ?? import.meta.env.BASE_URL
-    super(`${base}swiftlatex/swiftlatexpdftex.js`, options?.texliveUrl ?? null)
-    this.formatPath = `${base}swiftlatex/swiftlatexpdftex.fmt`
+    const version = options?.texliveVersion ?? '2025'
+    super(`${base}swiftlatex/${version}/swiftlatexpdftex.js`, options?.texliveUrl ?? null)
+    this.formatPath = `${base}swiftlatex/${version}/swiftlatexpdftex.fmt`
     this.skipFormatPreload = !!options?.skipFormatPreload
+    this.version = version
   }
 
   async init(): Promise<void> {
@@ -75,7 +80,7 @@ export class SwiftLatexEngine extends BaseWorkerEngine<WorkerMessage> {
     // Set TexLive endpoint — proxied through Vite dev server (/texlive/ → texlive:5001)
     // Note: do NOT use PdfTeXEngine's setTexliveEndpoint() — it has a bug
     // that nullifies the worker reference after posting the message
-    const texliveUrl = resolveTexliveUrl(this.texliveUrl)
+    const texliveUrl = resolveTexliveUrl(this.texliveUrl, this.version)
     this.worker!.postMessage({ cmd: 'settexliveurl', url: texliveUrl })
 
     // Pre-load format and pdftex.map in parallel

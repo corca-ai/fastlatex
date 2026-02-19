@@ -1,3 +1,4 @@
+import type { TexliveVersion } from '../types'
 import { BaseWorkerEngine, resolveTexliveUrl } from './base-worker-engine'
 
 interface WorkerMessage {
@@ -8,9 +9,17 @@ interface WorkerMessage {
 }
 
 export class BibtexEngine extends BaseWorkerEngine<WorkerMessage> {
-  constructor(options?: { assetBaseUrl?: string; texliveUrl?: string }) {
+  private version: TexliveVersion
+
+  constructor(options?: {
+    assetBaseUrl?: string
+    texliveUrl?: string
+    texliveVersion?: TexliveVersion
+  }) {
     const base = options?.assetBaseUrl ?? import.meta.env.BASE_URL
-    super(`${base}swiftlatex/swiftlatexbibtex.js`, options?.texliveUrl ?? null)
+    const version = options?.texliveVersion ?? '2025'
+    super(`${base}swiftlatex/${version}/swiftlatexbibtex.js`, options?.texliveUrl ?? null)
+    this.version = version
   }
 
   async init(): Promise<void> {
@@ -46,7 +55,10 @@ export class BibtexEngine extends BaseWorkerEngine<WorkerMessage> {
       }
     })
 
-    this.worker!.postMessage({ cmd: 'settexliveurl', url: resolveTexliveUrl(this.texliveUrl) })
+    this.worker!.postMessage({
+      cmd: 'settexliveurl',
+      url: resolveTexliveUrl(this.texliveUrl, this.version),
+    })
   }
 
   writeFile(path: string, content: string | Uint8Array): void {

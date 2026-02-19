@@ -1,4 +1,4 @@
-import type { EngineStatus } from '../types'
+import type { EngineStatus, TexliveVersion } from '../types'
 
 /** Shared base for WASM worker engines (pdfTeX, BibTeX). */
 export abstract class BaseWorkerEngine<TMsg = unknown> {
@@ -29,11 +29,23 @@ export abstract class BaseWorkerEngine<TMsg = unknown> {
   }
 }
 
+const CLOUDFRONT_2025 = 'https://dwrg2en9emzif.cloudfront.net/2025/'
+
 /** Resolve the TexLive server URL from an override, env var, or current origin. */
-export function resolveTexliveUrl(override: string | null): string {
-  return (
-    override ??
-    import.meta.env.VITE_TEXLIVE_URL ??
-    `${location.origin}${import.meta.env.BASE_URL}texlive/`
-  )
+export function resolveTexliveUrl(
+  override: string | null,
+  version: TexliveVersion = '2025',
+): string {
+  if (override) return override.endsWith('/') ? override : `${override}/`
+
+  const envUrl = import.meta.env.VITE_TEXLIVE_URL
+  if (envUrl) return envUrl.endsWith('/') ? envUrl : `${envUrl}/`
+
+  // Default behaviors based on version
+  if (version === '2025') {
+    return CLOUDFRONT_2025
+  }
+
+  // Legacy 2020 fallback
+  return `${location.origin}${import.meta.env.BASE_URL}texlive/`
 }

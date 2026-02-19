@@ -36,9 +36,14 @@ export type EngineStatus = 'unloaded' | 'loading' | 'ready' | 'compiling' | 'err
 
 export type AppStatus = EngineStatus | 'rendering'
 
+/** Supported TeX Live versions. */
+export type TexliveVersion = '2020' | '2025'
+
 // --- LatexEditor component API ---
 
 export interface LatexEditorOptions {
+  /** TeX Live version to use. Defaults to '2025'. */
+  texliveVersion?: TexliveVersion
   /** TexLive server endpoint URL. Defaults to auto-detected from BASE_URL. */
   texliveUrl?: string
   /** Main TeX file name. Defaults to 'main.tex'. */
