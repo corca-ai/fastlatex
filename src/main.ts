@@ -15,24 +15,7 @@ async function start() {
   if (projParam === 'sample') {
     console.log('[main] Loading "Paper Sample" project...')
     // List of files we found in public/sample
-    const fileList = [
-      'main.tex',
-      'refs.bib',
-      'artish_christmas_after.png',
-      'artish_christmas_before.png',
-      'artish_forest_after.png',
-      'artish_forest_before.png',
-      'artish_pearl_after.png',
-      'artish_potclock_after.png',
-      'fig1.png',
-      'fig2.png',
-      'fig3.png',
-      'fig4.png',
-      'fig5.png',
-      'flowers_poppies_big.jpg',
-      'retrieval_rerank.png',
-      'search_ratio.png',
-    ]
+    const fileList = ['main.tex', 'introduction.tex', 'refs.bib']
 
     files = {}
     const timestamp = Date.now()

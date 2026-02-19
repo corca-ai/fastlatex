@@ -1283,16 +1283,17 @@ export class LatexEditor {
       log.includes('Please (re)run BibTeX')
 
     if (!this.pendingRecompile && (result.success || result.pdf) && needsRerun) {
-      console.log('[main] Triggering automated rerun based on log message')
+      console.log('[main] Log indicates references changed. Triggering automated rerun...')
       this.pendingRecompile = true
 
-      this.engine.compile().then((r) => {
-        this.pendingRecompile = false
-
-        this.onCompileResult(r)
-
-        this.syncAndCompile()
-      })
+      // Small delay to ensure UI updates and VFS is stable
+      setTimeout(() => {
+        this.engine.compile().then((r) => {
+          this.pendingRecompile = false
+          this.onCompileResult(r)
+          this.syncAndCompile()
+        })
+      }, 100)
     } else {
       this.pendingRecompile = false
     }
@@ -1321,6 +1322,7 @@ export class LatexEditor {
 
   private async runBibtexChain(): Promise<void> {
     const mainBase = this.mainFile.replace(/\.tex$/, '')
+    this.setStatus('compiling', 'Running BibTeX...')
 
     const auxContent = await this.engine.readFile(`${mainBase}.aux`)
 

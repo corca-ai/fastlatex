@@ -1,786 +1,85 @@
-% Beta Version distributed 2022.12.11 
-% Updated 2022.12.19 - Font sizes for the preliminary pages were updated    
-% Special thanks to S.J. Kim
-% LaTex template을 제작해 준 김선중 대학원생에게 깊은 감사의 마음을 전합니다. 
-
-\documentclass[11pt]{report}
-\usepackage{geometry, graphicx, kotex, imakeidx, titlesec, array} % necessary packages
-\usepackage{mathptmx}   
-\usepackage{amsmath, amsthm, amssymb, mathrsfs, multirow, verbatim} % supplementary packages
-\usepackage[nobiblatex]{xurl} % enable linebreak of \url command
-\usepackage{indentfirst} % force indentation at every first paragraph of chapters, sections and subsections
-\usepackage{ragged2e}
-\usepackage{setspace}
+\documentclass[twocolumn,10pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{graphicx}
+\usepackage{cite}
 \usepackage{booktabs}
-\usepackage{subcaption}
-\usepackage[section]{placeins}
-\usepackage{listings}
-\usepackage{microtype}
-\usepackage{hyphenat}
-\usepackage{tabularx}
-\usepackage{cite} % Standard citation package
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows}
 
-\lstset{
-    breaklines=true,        % 줄바꿈 허용
-    breakatwhitespace=true, % 공백에서 줄바꿈
-    basicstyle=\ttfamily,   % 고정폭 글꼴
-}
-\geometry{paper=b5paper, left=30mm, right=30mm, top=30mm, bottom=30mm} % set the paper size and the margins
-  
-\titleformat{\chapter}{\normalfont\huge\bfseries}{\chaptertitlename\ \thechapter.}{20pt}{\huge} % chapter style
-\newtheorem{theorem}{Theorem} % theorem environment
-\newtheorem{definition}{Definition} % definition environment
-% if you need similar environments like lemma, corollary or remark, add them all.
-\makeindex % command for making an index chapter
+    itle{Modern LaTeX Rendering: A Survey of Browser-Based WASM Engines}
+\author{SwiftLatex Demo Team \ \small{Department of Web Engineering, Digital University}}
+\date{    oday}
 
-\linespread{1.25} % set the vertical spacing between successive lines (the ratio of the maximal height of a normal font and the base lineskip)
-
-\newcommand{\thesistitle}{Design and Implementation of Shopping Agent using Large Language Models}
-
-\renewcommand\arraystretch{1.3} % increase the vertical spacing by 30%
-
-%%% stands for a new chapter or a new page
-%% stands for a new section
-% stands for a comment
-
-%%%%
 \begin{document}
 
-%%% cover page for the master's thesis
-% For the doctoral degree, delete this page and use the next page
+\maketitle
 
-\newpage   
-\begin{center}
-\pagenumbering{gobble} % Cover page, title page and signature page) should not be numbered.
-{\fontsize{16pt}{16pt}\selectfont Master's Thesis \par}  
-\vspace{3cm} % 3cm spacing
-\huge \thesistitle
-\par\vspace{3cm} % spacing can be adjusted
-{\fontsize{16pt}{16pt}\selectfont Seungyun Baek \par}  % put the student's name here
-\vspace{0.5cm}
-{\fontsize{16pt}{16pt}\selectfont Department of Electrical and Computer Engineering \par}  % You can reduce the character spacing to make the department name on one line. If it takes up more than two lines, please reduce the vertical spacing after the title appropriately.
-\vspace{1.5cm}
-{\fontsize{18pt}{18pt}\selectfont Graduate School \par} 
-\vspace{0.5cm}
-{\fontsize{18pt}{18pt}\selectfont Korea University \par} 
-\vspace{1cm}
-{\fontsize{14pt}{14pt}\selectfont February 2026} 
-\end{center}
+\begin{abstract}
+This paper demonstrates the advanced capabilities of TeX Live 2025 running directly in the browser via WebAssembly. We explore the performance of the pdfTeX 1.40.28 engine, the integration of real-time BibTeX resolution, and the rendering of complex vector graphics using TikZ. Our results show that modern browser environments can provide a near-native LaTeX experience without the need for server-side compilation.
+\end{abstract}
 
-%%% title page for master's thesis
-\newpage 
-\begin{center}
-\huge \thesistitle
-\par\vspace{1.0cm} % spacing can be adjusted
-{\fontsize{16pt}{16pt}\selectfont by \par Seungyun Baek \par}
-\vspace{0.5cm}
-\rule{.6\textwidth}{0.4pt} %  % Student signature is required above the line
-\par\vspace{0.2cm}
-{\fontsize{16pt}{16pt}\selectfont under the supervision of Professor Junhee Seok \par}
-\vspace{0.7cm}
-{\fontsize{16pt}{18pt}\selectfont A thesis submitted in partial fulfillment of \par
- the requirements for the degree of \par Master of Science \par }   
-\vspace{10pt}
-{\fontsize{16pt}{16pt}\selectfont Department of Electrical and Computer Engineering \par} % You can reduce the character spacing to make the department name on one line. If it takes up more than two lines, please reduce the vertical spacing after the title appropriately.
-\par\vspace{1.5cm}
-{\fontsize{18pt}{18pt}\selectfont Graduate School \par \vspace{0.5cm}
- Korea University \par} 
-\vspace{1cm}
-{\fontsize{14pt}{14pt}\selectfont October 2025} % month and year of the submission deadline for the thesis/dissertation examination copy.
-\end{center}
+\input{introduction}
 
-\newpage 
-\begin{center}
-\vspace{1cm}
-{\fontsize{16pt}{18pt}\selectfont
-The thesis of Seungyun Baek has been approved \par
-by the thesis committee in partial fulfillment\par
-of the requirements for the degree of \par
-Master of Science \par}  
-\vspace{1cm}
-{\fontsize{14pt}{14pt}\selectfont December 2025} % the year and month of including the date the thesis examination was completed 
-\par\vspace{3cm}
-\rule{.6\textwidth}{0.4pt}\par % committee's signature above the line 
-{\fontsize{16pt}{16pt}\selectfont Committee Chair: Junhee Seok \par}
-\vspace{1cm}
-\rule{.6\textwidth}{0.4pt}\par % committee's signature above the line 
-{\fontsize{16pt}{16pt}\selectfont Committee Member: Jong-kook Kim \par}
-\vspace{1cm}
-\rule{.6\textwidth}{0.4pt}\par % committee's signature above the line 
-{\fontsize{16pt}{16pt}\selectfont Committee Member: Joongheon Kim \par}
-\end{center}
+\section{System Architecture}
+The system leverages a dual-engine approach, supporting both TeX Live 2020 and 2025. This is crucial for reproducibility in scientific research \cite{knuth1984tex}. As shown in Figure ef{fig:arch}, the workflow involves a virtual file system (VFS) synchronized with an asynchronous WASM worker.
 
-%%% English abstract page
-\newpage 
-\pagenumbering{roman} % set the page number as roman type from this page on.
-\newgeometry{left=20mm, right=20mm, top=30mm, bottom=30mm} % set the paper size and the margins
-% Margins shall be changed to bottom and top 3 cm, right and left 2 cm from this page forward.
-\addcontentsline{toc}{chapter}{Abstract}
-\begin{center}
-\LARGE \thesistitle % put the title here
-\par\vspace{20pt}
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[node distance=1.5cm]
+    ikzstyle{box} = [rectangle, rounded corners, minimum width=2cm, minimum height=0.8cm,text centered, draw=black, fill=blue!10]
+    ikzstyle{arrow} = [thick,->,>=stealth]
 
-\normalsize \doublespacing
-by Seungyun Baek\par % put the student name here
-Department of Electrical and Computer Engineering\par
-under the supervision of Professor Junhee Seok % put the professor's name and the department here
-\par\vspace{20pt}
-\large \textbf{Abstract}
-\end{center}
 
-\normalsize
-\justifying % this command available with \usepackage{ragged2e}
-\doublespacing
+ode (vfs) [box] {VFS};
 
-This thesis explores the integration of Large Language Models (LLMs) into e-commerce systems, focusing on strategic translation evaluation, conversational task planning, automated product tagging, and semantic reranking.
-First, a comparative study evaluates five machine translation models using an LLM-based scoring framework that captures semantic and grammatical quality beyond traditional metrics such as BLEU. The analysis demonstrates GPT-4-turbo’s superior translation quality despite higher cost and latency.
-Second, we introduce Task-Name Anonymization (TNA), a prompt-engineering technique that mitigates lexical bias in subtask detection within LLM-based Conversational Recommender System (LLMCRS). TNA combined with few-shot prompting achieves 94\% accuracy on real user dialogues, improving robustness without fine-tuning.
-Third, we propose a bilingual (English–Korean) image- and description-based tagging pipeline for small-scale shopping platforms. Leveraging GPT-4o’s multimodal understanding and lightweight keyword mapping, the system reduces the No-Results Rate (NRR) by 57.7\% and enhances visual and contextual retrieval quality.
-Finally, an LLM-based Reranker replaces traditional vector-based ranker in an e-commerce search pipeline, directly interpreting product descriptions for semantic relevance. The reranker improves offline satisfaction scores by 12.1\% and increases the search-to-traffic ratio by 23.4\% in live deployment.
-Collectively, these studies demonstrate the practical potential of LLMs for translation, task planning, tagging, and ranking—key components in next-generation AI-driven e-commerce ecosystems.
+ode (worker) [box, below of=vfs] {WASM Worker};
 
-\par\vspace{20pt}
-\textbf{Keywords}: Machine Learning, Large Language Models, Machine Translation, Conversational Recommender Systems, Keyword Search, E-Commerce Platform
+ode (pdf) [box, right of=worker, xshift=1.5cm] {PDF View};
 
-%%% Korean abstract page
+\draw [arrow] (vfs) -- (worker);
+\draw [arrow] (worker) -- (pdf);
+\end{tikzpicture}
+\caption{Simplified architecture of the browser-based LaTeX compiler.}
+\label{fig:arch}
+\end{figure}
 
-\newpage 
-\begin{center}
-\LARGE 대규모 언어 모델 기반 쇼핑 에이전트의 설계 및 구현 % put the title here
-\par\vspace{20pt}
-\normalsize 백 승 윤\par % put the student name here
-전 기 전 자 공 학 과\par % put the professor's name and the department here
-지 도 교 수:  석 준 희
-\par\vspace{20pt}
-\addcontentsline{toc}{chapter}{국문초록}
-\large \textbf{국문 초록}
-\end{center}
-
-\normalsize 
-
-본 논문은 대규모 언어 모델을 전자상거래 시스템에 통합하는 방안을 탐구하며, 번역 품질 평가, 대화형 과업 계획, 자동 상품 태깅, 의미 기반 재순위화 등의 핵심 기술을 중심으로 한다.
-
-첫째, 다섯 가지 기계번역 모델을 대상으로, 의미적 정확성과 문법적 완성도를 반영하는 대규모 언어 모델 기반 평가 프레임워크를 제안하였다. BLEU와 같은 전통적 지표를 넘어선 이 접근을 통해 GPT-4-turbo가 비용과 지연 시간이 높음에도 불구하고 가장 우수한 번역 품질을 보임을 확인하였다.
-
-둘째, 대화형 추천 시스템 내 하위 작업 탐지에서 발생하는 어휘적 편향을 완화하기 위해 작업명 익명화 기법 (Task-Name Anonymization)이라는 프롬프트 엔지니어링 기법을 제안하였다. TNA를 퓨샷 프롬프트 기법과 결합한 결과, 실제 사용자 대화 데이터에서 94\%의 정확도를 달성하였으며, 파인튜닝 없이도 모델의 강건성을 향상시켰다.
-
-셋째, 소규모 쇼핑 플랫폼을 위한 영–한 이중언어 이미지 및 설명 기반 태깅 파이프라인을 설계하였다. GPT-4o의 멀티모달 이해 능력과 경량 키워드 매핑을 결합한 이 시스템은 검색 결과 없음 비율을 57.7\% 감소시키고, 시각적·문맥적 검색 품질을 동시에 향상시켰다.
-
-마지막으로, 전통적인 벡터 기반 랭킹을 대체하는 대규모 언어 모델 기반 재순위화 모델을 제안하였다. 해당 모델은 상품 설명 전체를 자연어로 해석하여 의미적 관련성을 직접 판단하며, 오프라인 평가에서 사용자 만족도를 12.1\% 향상시키고, 실제 전자상거래 플랫폼에서 검색 대비 트래픽 비율을 23.4\% 증가시켰다.
-
-이상의 연구들은 대규모 언어 모델이 번역, 하위 작업 플래닝, 태깅 자동화, 검색 순위화 등 핵심 구성요소 전반에서 실질적 혁신을 제공할 수 있음을 입증하며, 차세대 인공지능 기반 전자상거래 생태계의 실현 가능성을 제시한다.
-
-\par \vspace{20pt}
-\textbf{중심어} : 머신러닝, 거대 언어 모델, 기계번역, 대화형 추천 시스템, 키워드 검색, 전자상거래 플랫폼
-
-%%% dedication
-
-% \newpage
-% ~
-% \vspace{5.5cm} \par
-% \begin{center}
-% You can dedicate your thesis/dissertation  \par 
-% to someone you know either personally or professionally. \par
-% It is customary to place the dedication text \par
-% in the center of the page without a title heading. \par
-% If you do not need this page, delete it.
-% \end{center}
-
-%%% preface
-
-% \newpage
-\chapter*{Preface}
-\addcontentsline{toc}{chapter}{Preface}
-\normalsize
-Chapter 3. A version of this material has been published as Baek, S., Lee, S., \& Seok, J. (2024, July). Strategic Insights in Korean-English Translation: Cost, Latency, and Quality Assessed through Large Language Model. In 2024 Fifteenth International Conference on Ubiquitous and Future Networks (ICUFN) (pp. 551-553). IEEE. doi: 10.1109/ICUFN61752.2024.10625181.
-
-The following is the authorship contribution statement: Seungyun Baek, Conceptualization, Methodology, Analysis, Investigation, Writing – original draft. Seunghwan Lee: Analysis, Investigation, Writing – original draft. Junhee Seok: Methodology, Writing – review \& editing, Supervision
-
-% \newpage
-% Examples you may refer to 
-% \begin{itemize}
-% \item\url{https://www.grad.ubc.ca/sites/default/files/doc/page/thesis_sample_prefaces.pdf}
-% \item\url{https://www.phase-trans.msm.cam.ac.uk/2002/thomas/chapter1.pdf}
-% \end{itemize}
-
-%%% acknowledgment
-\newpage
-\chapter*{Acknowledgment}
-\addcontentsline{toc}{chapter}{Acknowledgment}
-
-2년이라는 기간 동안 대학원생의 신분으로 많은 것들을 경험하고 배우며 성장할 수 있었습니다. 이 모든 것들이 저를 옆에서 지원해주고 도움 주신 많은 분들의 손길 아래 가능했다고 생각합니다.
-
-석사 연구를 지도해주신 석준희 교수님, 항상 먼저 제게 관심을 가져주시고 제 석사 생활이 올바른 방향으로 갈 수 있게 이끌어주셔서 감사드립니다. 제 학위논문이 더욱 정교할 수 있도록 심사해주신 김종국 교수님, 김중헌 교수님께도 감사드립니다.
-
-석사 생활 전반적으로 큰 도움을 주신 황효석 선배님, 이승환 학우님, 윤누리 학우님, 김유성 학우님, 황영서 학우님 감사합니다. 언제나 도움을 요청하는 입장이었는데 마다하지 않고 도와주셔서 감사합니다.
-
-제 학위 논문에 거론된 많은 연구를 함께 해온 전태현 님 정말 감사합니다. 태현 님과 함께한 연구와 시간들이 모두 제게 뜻깊었고 값진 시간이었습니다. 연구에 도움을 준 황상민 님, 김원섭 님, 홍승연 님, 정재호 님, 현진호 님, 송기성 님 감사드립니다. 혼자였으면 못해냈을 연구를 여러분들의 탁월한 역량이 있었기에 완성할 수 있었습니다. 제게 연구 뿐만 아니라 리더십에 대해 알려주고 함께 의지하며 달려온 이태호 님, 김태희 님, 김준홍 님, 오경택 님, 설지원 님, 장은솔 님, 김예린 님 감사드립니다. 여러분들이 어디서 무엇을 하든 응원하겠습니다. 또한 이 석사 생활이 가능하게 전폭적인 지원을 해주신 정영현 님께 감사드립니다. 돌아보니 영현 님의 도움이 정말 많았다는 생각이 듭니다.
-
-제가 힘들 때마다 위로해주고 지지해주고 응원해준 정호진, 류시모, 한충환, 박세훈 학우님께도 감사드립니다.
-
-언제나 조건없는 사랑을 주시고 제가 무엇을 하든 변함없이 지지를 해주는 가족들 감사드립니다. 마지막으로, 언제나 저를 선한 길로 하나님께 이 모든 영광을 돌립니다.
-
-%%% table of contents
-\newpage
-\renewcommand*\contentsname{Table of Contents}
-\addcontentsline{toc}{chapter}{Table of Contents}
-\tableofcontents
-
-\bigskip
-
-% The table of contents starts with the abstract. 
-% The preliminary pages (abstract, dedication, preface, acknowledgments, table of contents, list of tables, list of figures, nomenclature) should be assigned using small Roman numerals (i, ii, iii, iv, v...). The other preliminary pages (cover page, title page, and signature page) should not be numbered. For the main body, use Arabic numbers (1, 2, 3, 4, 5...) starting with page 1.
-% It is customary to use Arabic numbers (1, 2, 3, 4, 5...) for the chapters in the main body and capital letters (A, B, C...) for the sections in the appendices.
-
-%%% list of tables
-\newpage
-\listoftables
-\addcontentsline{toc}{chapter}{List of Tables}
-
-\bigskip
-% A list of tables shall be included when there are tables in the thesis/dissertation. Table numbering can be continuous throughout the thesis/dissertation or by chapter (e.g., 1.1, 1.2, 2.1, 2.2...).
-
-%%% list of figures
-\newpage
-\listoffigures
-\addcontentsline{toc}{chapter}{List of Figures}
-
-\bigskip
-% List of figures should be prepared when figures are included in the thesis/dissertation. Figure numbering can be continuous throughout the thesis/dissertation or by chapter (e.g., 1.1, 1.2, 2.1, 2.2...).
-
-%%% nomenclature (or list of symbols) 
-\chapter*{Nomenclature}
-\addcontentsline{toc}{chapter}{Nomenclature}
-\begin{tabular}{p{.2\textwidth}p{.7\textwidth}}
-
-\multicolumn{2}{l}{Abbreviations}\\
-LLM         & Large Language Model\\
-MT          & Machine Translation\\
-CRS         & Conversational Recommender System\\
-LLMCRS      & LLM-enhanced Conversational Recommender System\\
-NRR         & No-Results Rate\\
-STR         & Search-to-Traffic Ratio\\
-TNA         & Task-Name Anonymization\\
-BLEU        & Bilingual Evaluation Understudy\\
-ROUGE       & Recall-Oriented Understudy for Gisting Evaluation\\
-\end{tabular}
-
-\bigskip
-
-%%% first chapter of the main body
-
-\chapter{Introduction}\label{chap:intro}
-\pagenumbering{arabic} % set the page number as Arabic type from this page on.
-
-The rapid advancement of Large Language Models (LLMs) has opened new possibilities for intelligent e-commerce systems capable of understanding, generating, and reasoning~\cite{zhang2024llasa, de2024retail, ren2024survey, zhang2024enhancing}. Traditional E-Commerce platforms primarily relied on keyword-based search and manually curated metadata, often resulting in limited relevance and user satisfaction. In contrast, LLMs can interpret natural language, analyze user intent, and semantically relate queries to product information, making them an ideal foundation for next-generation shopping agents~\cite{barbany2024leveraging, zeng2025cite}.
-
-Despite this potential, integrating LLMs into real-world e-commerce workflows remains challenging. Machine translation quality varies across models, affecting multilingual search accuracy. Conversational Recommender systems often suffer from lexical bias in subtask detection, where models rely too heavily on specific task names rather than contextual understanding~\cite{moradi2023tidying, farshidi2023understanding}. Small-scale retailers lack resources for manual tagging, leading to inconsistent metadata and high “no-results” rates. Finally, most search pipelines still depend on vector-based ranking methods that cannot fully capture the semantic relevance between user intent and product descriptions.
-
-To address these issues, this thesis explores the design and implementation of an intelligent shopping agent that incorporates LLMs across four core components: translation evaluation, conversational subtask detection, automated product tagging, and LLM-based semantic reranking. First, we propose an LLM-based framework for evaluating machine translation quality beyond surface-level metrics like BLEU, enabling context-aware assessment of Korean–English translations. Second, we introduce a prompt-engineering technique, Task-Name Anonymization (TNA), that mitigates lexical bias in subtask detection for conversational recommender systems. Third, we present a bilingual image- and description-based tagging pipeline leveraging GPT-4o’s multimodal capabilities to improve search recall for small-scale online stores. Finally, we develop an LLM-based reranker that directly interprets product descriptions, improving both semantic accuracy and user satisfaction in live search environments.
-
-The contributions of this thesis lie in demonstrating the practical integration of LLMs into each of these processes and empirically validating their impact through quantitative and qualitative experiments. Collectively, the proposed system illustrates how LLMs can enhance translation, task planning, tagging, and ranking—key components of modern e-commerce ecosystems. The remainder of this thesis is organized as follows: Chapter~2 reviews theoretical and technical backgrounds; Chapters~3 through~6 detail each experimental study; and Chapter~7 concludes with overall insights and future directions.
-
-% For more information about labeling and referencing, refer to the followings.
-% \begin{itemize}
-% \item
-% \url{https://en.wikibooks.org/wiki/LaTeX/Labels_and_Cross-referencing}
-% \item
-% \url{https://www.overleaf.com/learn/latex/Cross_referencing_sections%2C_equations_and_floats}
-% \end{itemize}
-\newpage
-
-%%%  the second chapter of the main body
-\chapter{Backgrounds}
-
-\section{Large Language Models}
-Large Language Models (LLMs) have fundamentally reshaped natural language processing by enabling systems to understand and generate human-like text at scale~\cite{kalyan2024survey, naveed2025comprehensive, zhao2023survey, kaya2024decoding, yang2025comprehensive}. Built on the Transformer architecture, these models capture long-range dependencies through self-attention mechanisms, allowing for nuanced contextual reasoning. Early NLP systems relied on recurrent or convolutional structures, which struggled to model complex linguistic patterns, especially across languages with distinct morphological or syntactic structures. The development of LLMs such as GPT-3.5 and GPT-4 marked a paradigm shift—moving from task-specific neural networks to general-purpose reasoning models capable of multilingual, multimodal understanding. As a result, LLMs have become a central foundation for diverse applications, including translation, summarization, dialogue, and information retrieval~\cite{zhao2023survey, huang2024survey}.
-
-\section{LLM Agents in Shopping Contexts}
-The evolution from Large Language Models (LLMs) to autonomous agents represents a shift from passive text generation toward active decision-making systems capable of perceiving, reasoning, and acting~\cite{putta2024agent, yan2025fama, zeng2025cite}. While LLMs excel at understanding and generating language, LLM-based agents augment these capabilities with tool use, memory, and multi-step planning—enabling them to operate as intelligent intermediaries between users and digital environments. In the context of e-commerce and shopping, such agents can interpret user goals, retrieve relevant products, compare attributes, and refine recommendations through iterative dialogue.
-
-LLM agents differ from conventional recommender pipelines in that they can integrate unstructured reasoning (e.g., understanding user intent and context) with structured operations (e.g., API calls for search or filtering)~\cite{huang2025recommender, zhang2025survey}. For instance, when a user expresses a vague request such as “I’m looking for a lightweight laptop for travel,” an LLM agent can decompose the query into subtasks—understanding key attributes like weight and battery life, retrieving candidate products, and re-ranking them based on inferred priorities. This agentic framework effectively merges language understanding with procedural reasoning, bridging the gap between natural conversation and actionable search.
-
-Moreover, by leveraging shopping-specific memories and feedback loops, LLM agents can adapt to individual preferences over time, learning from both implicit signals and explicit feedback. When integrated into Conversational Recommender Systems (CRS)~\cite{feng2023large, friedman2023leveraging} or search-rerank pipelines, these agents serve as dynamic orchestrators—deciding whether to chat, search, or recommend—based on real-time conversational cues. In this sense, LLM agents transform the static notion of a recommender system into a continuously learning, reasoning-based assistant that aligns with user intent and commercial objectives.
-
-\subsection{Agentic LLMs: Tool Use, Memory, and Planning}
-Agentic systems extend LLMs with tool use (search, DB/API calls), episodic memory (user profile, past sessions), and multi-step planning (decomposition, reflection). Formally, at turn $t$ the planner samples an action $a_t\in\mathcal{A}$ from $\pi_\theta(a_t\mid s_t)$ where $s_t$ encodes the dialogue, retrieved evidence, and memory. Execution yields observation $o_t$ and cost $c_t$ (latency, API fee). The objective balances task reward $R$ with operational costs:
+\section{Mathematical Capabilities}
+Modern pdfTeX handles complex mathematical notations with ease. For example, the relationship between the number of vertices $V$, edges $E$, and faces $F$ of a convex polyhedron is given by Euler's formula:
 \begin{equation}
-\max_{\pi_\theta}\ \mathbb{E}\!\left[\sum_{t} \gamma^t \big(R(s_t,a_t,o_t)-\lambda_1 \mathrm{Latency}(a_t)-\lambda_2 \mathrm{Cost}(a_t)\big)\right].
+V - E + F = 2
 \end{equation}
-In e-commerce, $\lambda_1,\lambda_2$ are typically non-negligible, driving designs such as selective tool invocation and short-context prompting.
 
-
-\section{Machine Translation and Evaluation}
-Machine translation (MT) has long served as a core benchmark for measuring progress in language understanding. Traditional approaches—ranging from rule-based and statistical methods to early neural machine translation (NMT)—relied heavily on lexical alignment and n-gram statistics. Evaluation metrics such as BLEU and ROUGE became standard, but they primarily measured surface-level correspondence rather than semantic fidelity. With the advent of LLMs, translation systems now leverage deep contextual embeddings to produce more accurate and natural results. Furthermore, LLMs have enabled new forms of translation evaluation that assess meaning preservation, grammaticality, and tone from a human-like perspective~\cite{karpinska2023large}. Such evaluation methods are particularly critical for Korean–English translation, where structural differences like word order, particles, and honorifics introduce unique challenges~\cite{eo2022word}. An LLM-based evaluation framework thus provides a more comprehensive, context-aware measure of quality compared to conventional metrics.
-
-\section{Conversational Recommender Systems}
-The overarching goal of Conversational Recommender Systems (CRS) is to merge natural language interaction with core recommendation logic, enabling users to search, explore, and receive personalized product suggestions through multi-turn dialogue \cite{jannach2021survey, zhang2024llasa, chen2025evaluating}. Unlike traditional Recommender Systems (RS) which often assume an one-shot interaction paradigm based on observing past user behavior, CRS supports a richer set of interactions designed to improve preference elicitation and allow users to actively provide feedback and ask questions about recommendations. This approach helps address limitations such as the difficulty in reliably estimating preferences for high-involvement products, or situations where users construct their preferences dynamically during the decision process while learning about available options. A CRS is fundamentally a task-oriented system that supports multi-turn dialogue, aiming to achieve specific goals like providing suggestions, acquiring detailed user preferences, or offering explanations, thereby distinguishing it from more general dialogue systems. Crucially, maintaining this multi-turn capability requires the CRS to implement explicit or implicit forms of dialogue state management to track the conversation history and current state, setting it apart from simple single-shot Question-Answering recommendation tools.
-
-In traditional conversational recommender system architectures, the workflow was divided into several components, such as intent recognition, slot filling, candidate retrieval, and response generation. A typical framework included an input processing module that handled tasks like intent detection and named entity recognition, a central dialogue management system that updated the dialogue state based on recognized intents and preferences, a recommendation and reasoning engine, and various knowledge elements such as the item database and domain knowledge. In this modular design, preference elicitation was often described as slot filling, where the system aimed to collect values for predefined item attributes. However, this segmented approach often led to the propagation of errors from early stages to later ones and showed limited ability to generalize to new or unseen queries.
-
-The advent of Large Language Models (LLMs) has initiated a shift toward a more holistic framework—LLM-enhanced CRS (LLMCRS)—in which a single, comprehensive model can interpret the entire conversation, plan necessary subtasks, and generate coherent outputs \cite{feng2023large}. This integrated approach leverages LLMs' innate multi-task and few-shot learning capabilities, providing a promising solution to the prior issues of task-specificity and poor generalization encountered by earlier e-commerce shopping assistants. In this paradigm, subtask detection assumes a pivotal role, determining whether the system's immediate action should involve general conversation, executing a recommendation, or performing a structured search. To function effectively in specialized domains like e-commerce, LLMs require domain-specific knowledge injection. For example, the LLaSA assistant achieves its omnipotent capabilities through instruction tuning on large-scale datasets such as EshopInstruct (comprising 65,000 samples), enhancing skills across Shopping Concept Understanding, Knowledge Reasoning, User Behavior Alignment, and Multilingual Abilities \cite{zhang2024llasa}. Nonetheless, when models rely on explicit task names within prompts, they can develop a lexical bias, leading them to overfit to superficial labels rather than the underlying intent. To mitigate this, the Task-Name Anonymization (TNA) method abstracts task identifiers, facilitating more robust and domain-agnostic intent classification. Furthermore, enhancing the complex reasoning abilities of LLMCRS solutions utilizes advanced inference optimization strategies like Chain-of-Thought (CoT) prompting and Re-Reading techniques \cite{wei2022chain, xu2023}.
-
-The evaluation of CRS poses unique difficulties due to the intrinsic complexity of integrating dialogue management with recommendation generation. Conventional approaches typically employ a fragmented evaluation style, using separated, rule-based metrics such as Recall for recommendation accuracy and BLEU for dialogue quality, which fails to holistically assess the overall user experience or capture the necessary interdependencies between conversational dynamics and user preference modeling. Addressing this methodological gap, the Conversational Recommendation Evaluator (CoRE) framework was introduced as a user-centric, LLM-based offline evaluation protocol \cite{chen2025evaluating}. CoRE capitalizes on the significant natural language understanding capabilities of LLMs, enabling the evaluation scores to align more closely with human preferences than traditional metrics. The framework operates in two sequential phases: first, the LLM-As-Evaluator component utilizes LLMs to score conversation logs against 12 key factors that influence user experience, providing scores (ranging from 0 to 4) and corresponding reasoning for each. These 12 factors are classified into four dimensions: Dialogue Actions (Coherence, Recoverability, Proactiveness), Language Expression (Grammatical Correctness, Naturalness, Appropriateness), Recommended Items (Effectiveness, Novelty, Diversity), and Response Content (Semantic Relevance, Explainability, Groundness). Second, the Multi-Agent Debater component employs a multi-agent debate mechanism featuring four distinct, expert roles (Common User, Domain Expert, Linguist, and HCI Expert) to discuss and synthesize the factor-wise scores into a unified, overall performance score (ranging from 0 to 100). This collaborative, multi-agent debate process actively mitigates the bias and instability inherent in relying on a single human or LLM annotator, and results demonstrate that CoRE's overall evaluation scores achieve significantly better alignment with human feedback compared to fragmented rule-based metrics.
-
-\section{Search and Reranking Systems}
-Search-based recommendation systems generally follow a two-stage architecture: retrieval and reranking. The retrieval stage efficiently narrows down a large corpus of candidates using vector-based similarity or approximate nearest-neighbor (ANN) methods. The reranking stage then reorders these candidates to maximize semantic relevance and personalization. Conventional rerankers rely on dense embeddings or handcrafted features, which compress rich textual meaning into low-dimensional spaces and lose interpretability. In contrast, LLM-based rerankers evaluate full product descriptions and user queries in natural language form, preserving contextual relationships and enabling fine-grained reasoning. This approach enhances both precision and diversity in search results, as evidenced by improvements in offline satisfaction and live engagement metrics such as the Search-to-Traffic Ratio (STR). However, balancing the benefits of LLM reasoning with inference latency and cost remains an ongoing research challenge.
-
-\subsection{Retrieval--Rerank Pipelines in E-commerce}
-A practical pipeline is: (1) \textit{Query Understanding} (spell/segmentation, language ID), (2) \textit{Candidate Retrieval} via ANN over dual encoders, (3) \textit{Business Filters} (stock, region, price range), and (4) \textit{Reranking}. Traditional rerankers optimize pairwise losses (e.g., BPR); LLM rerankers instead score full texts:
+Furthermore, we can represent more complex structures such as the Navier-Stokes equations for incompressible flow:
 \begin{equation}
-\mathrm{Score}_{\mathrm{LLM}}(q,d)=\mathbb{E}_{y\sim p_\theta(\cdot\mid q,d)}[u(y)],
+ho \left( \frac{\partial \mathbf{u}}{\partial t} + \mathbf{u} \cdot 
+abla \mathbf{u} ight) = -
+abla p + \mu 
+abla^2 \mathbf{u} + \mathbf{f}
 \end{equation}
-where $y$ is a natural-language judgment and $u(\cdot)$ maps the judgment to a numeric utility. While more accurate, the method must meet SLOs: $<\!x$ ms p50 latency and $<\!b$ KRW per query.
 
-\newpage
-
-\chapter{Strategic Insights in Machine Translation:
-Cost, Latency, and Quality Assessed through Large
-Language Model}
-
-\section{Abstract}
-This study evaluates five machine translation (MT) models—GPT-3.5-turbo, GPT-4-turbo, Google Translator API, DeepL API, and Papago API—focusing on cost, latency, and translation quality for Korean-English and English-Korean pairs. We introduce a novel application of Large Language Models (LLMs) for translation evaluation, scoring outputs on a 0–100 scale based on semantic accuracy and grammaticality. Using a balanced dataset of 2,400 sentence pairs from AI-Hub across four domains, results show GPT-3.5-turbo as the most cost-efficient, Google Translator API as the fastest, and GPT-4-turbo as superior in translation quality despite higher costs and latency. This LLM-based evaluation approach enables more nuanced quality assessment than traditional metrics, underscoring the strategic importance of selecting models based on application-specific requirements.
-
-\section{Introduction}
-Machine translation (MT) is a critical technology for bridging linguistic divides in the digital era~\cite{leiter2024towards}. With the rise of LLMs such as GPT-4, translation quality has improved significantly due to enhanced contextual and semantic understanding~\cite{jiao2023chatgpt}. This capability is particularly impactful in prompt engineering workflows, where translating non-English inputs into English before querying LLMs can yield substantial performance gains.
-
-Traditional metrics like BLEU and ROUGE have laid the foundation for MT evaluation but often fail to capture nuanced fidelity and fluency. LLM-based evaluation methods have emerged as a promising alternative, offering richer, context-aware assessments~\cite{kocmi2023large}. Despite this progress, the optimal choice of MT models—especially for Korean-English translations—remains unclear. Different applications require trade-offs between translation quality, latency, and cost.
-
-This study addresses this gap by comparing five prominent MT models across these dimensions, using a diverse dataset from AI-Hub. The results aim to guide practitioners in choosing the most appropriate model for their specific use cases, balancing industrial requirements with linguistic performance.
-
-\section{Proposed Method}
-
-\subsection{Dataset}
-We used the AI-Hub \textit{Machine Translation Quality Validation Dataset} , which contains 620,000 Korean-English translation pairs across four domains: Culture and Arts (CA), Economy and Society (ES), Daily Life and Health (SH), and Science and Technology (ST)~\cite{aihubdata}. For this study, we selected a representative subset of 2,400 pairs—1,200 Korean-to-English (ko-en) and 1,200 English-to-Korean (en-ko)—evenly distributed across the four domains (300 per domain per direction).
-
-Table~\ref{tab:dataset_examples} illustrates representative examples from each category, showing that the dataset spans a diverse range of linguistic and contextual expressions—from news-style narratives in Culture and Arts to technical descriptions in Science and Technology. Such diversity ensures that translation models are evaluated across both general-purpose and domain-specific language contexts.
+\section{Experimental Results}
+We compared the compilation speed across different TeX Live versions. Table ef{tab:perf} summarizes the average time taken for a standard 10-page document.
 
 \begin{table}[h]
 \centering
-\caption{Example translation pairs from each domain in the AI-Hub dataset}
-\renewcommand{\arraystretch}{1.4}
-\begin{tabularx}{\textwidth}{|c|X|X|}
-\hline
-\textbf{Domain} & \textbf{Source Text (English)} & \textbf{Target Text (Korean)} \\
-\hline
-CA (Culture \& Arts) &
-Bhutan will reopen for international tourists from September for the first time, since the pandemic began more than two years ago. &
-부탄은 팬데믹이 시작된 지 2년이 넘은 이후 처음으로 9월부터 외국인 관광객을 위해 다시 문을 연다. \\
-\hline
-ES (Economy \& Society) &
-Musk believes he is free to change his mind, disrupt its operations and trash the company. &
-머스크는 자신의 마음을 바꾸고, 운영을 방해하고, 회사를 엉망으로 만들 수 있다고 믿는다. \\
-\hline
-SH (Society \& Health) &
-Physicians and poison control officials say they're worried that people seeking abortions will turn to ineffective and dangerous methods shared online. &
-의사들과 독극물 관리 관계자들은 낙태를 원하는 사람들이 온라인에서 공유되는 비효율적이고 위험한 방법으로 바뀔 것을 우려하고 있다고 말한다. \\
-\hline
-ST (Science \& Technology) &
-Samsung, maker of the Galaxy phone series, had its mid- and high-end phones adopt chipsets with 5-nanometer nodes or more advanced ones. &
-갤럭시폰 시리즈를 만든 삼성전자는 중저가폰에 5나노 노드 이상의 칩셋을 채택했다. \\
-\hline
-\end{tabularx}
-\label{tab:dataset_examples}
-\end{table}
-
-\subsection{Models}
-The evaluation included five models: GPT-4-turbo~\cite{gpt4turbo}, GPT-3.5-turbo~\cite{gpt35turbo}, Google Translator API~\cite{googletranslatorapi}, DeepL API~\cite{deepl}, and Papago API~\cite{papago}. These were chosen to represent both cutting-edge LLM-based translation and widely used commercial translation systems, allowing a balanced comparison across different architectures and pricing structures.
-
-\subsection{Evaluation Method}
-We applied an LLM-based scoring method to evaluate translation quality. 
-Each translated sentence was scored on a scale from 0 (“no meaning preserved”) to 100 (“perfect meaning and grammar”), measuring semantic fidelity, contextual accuracy, and fluency. 
-This approach provided richer insights than traditional n-gram–based metrics by directly assessing the coherence and correctness of meaning within context.
-
-Let $S_i^{(src)}$ denote the $i$-th source sentence and $S_i^{(hyp)}$ the translated output from model $M$. 
-The LLM-based evaluation function $f_\theta$ assigns a quality score $Q_i$ based on semantic similarity and grammatical correctness as follows:
-\[
-Q_i = f_\theta(S_i^{(src)}, S_i^{(hyp)}) = \alpha \cdot \text{Sem}(S_i^{(src)}, S_i^{(hyp)}) + (1 - \alpha) \cdot \text{Gram}(S_i^{(hyp)}),
-\]
-where $\text{Sem}(\cdot)$ measures semantic fidelity using contextual equivalence judgments and $\text{Gram}(\cdot)$ captures grammaticality and fluency. 
-In this study, $\alpha$ was empirically set to 0.5 to balance meaning and grammatical correctness.
-
-The final model score is computed as the arithmetic mean across all $N$ translation pairs:
-\[
-\bar{Q}_M = \frac{1}{N} \sum_{i=1}^{N} Q_i.
-\]
-This scoring function ensures that models are rewarded for both accurate meaning preservation and natural expression.
-
-\section{Experiments}
-
-\subsection{Cost Analysis}
-Processing all 2,400 sentence pairs revealed distinct differences in translation costs among the models. GPT-3.5-turbo was the most cost-efficient, averaging ₩0.12 per translation, while GPT-4-turbo was the most expensive at ₩2.46. Commercial services such as Google Translator (₩1.54) and Papago (₩1.16) were moderately priced, whereas DeepL (₩1.92) fell between these two categories. These results highlight a clear trade-off between cost and quality, particularly for large-scale multilingual applications.
-
-\begin{figure}[h]
-\centering
-\includegraphics[width=1.0\textwidth]{fig1.png}
-\caption{Average Cost by Model}
-\label{fig1}
-\end{figure}
-
-\subsection{Latency Analysis}
-The latency comparison demonstrated a similar pattern of trade-offs. Google Translator API exhibited the fastest average latency at 0.16 seconds, followed by Papago at 0.24 seconds and DeepL at 0.45 seconds. In contrast, GPT-3.5-turbo and GPT-4-turbo were slower, with average latencies of 1.27 seconds and 2.30 seconds, respectively. These longer response times reflect the increased computational complexity of LLM-based translation, which processes contextual meaning at a deeper level than traditional models.
-
-\begin{figure}[h]
-\centering
-\includegraphics[width=1.0\textwidth]{fig2.png}
-\caption{Average Latency by Model}
-\label{fig2}
-\end{figure}
-
-\subsection{Translation Quality}
-The evaluation of translation quality demonstrated that GPT-4-turbo achieved the highest average score of 93.05, showing clear superiority in semantic precision and grammatical fluency. Google Translator followed with a score of 91.75, while Papago, GPT-3.5-turbo, and DeepL scored 90.01, 89.88, and 89.42, respectively. Although the differences among models were modest, GPT-4-turbo consistently outperformed others across domains. Directional analysis also indicated a slight advantage for English-to-Korean translations, suggesting that model performance may depend on the source–target direction. By domain, GPT-4-turbo achieved the largest margin in Science and Technology, where precise terminology and structure are critical.
-
-It is worth noting that using GPT-4-turbo to evaluate its own outputs may introduce a self-preference bias. However, this potential bias is mitigated in our framework because the evaluation is not solely open-ended but grounded in human-verified reference translations (ground truth). By measuring semantic alignment against these explicit standards, the model's scoring reflects fidelity to the reference rather than mere preference for its own generation style.
-
-\begin{figure}[h]
-\centering
-\includegraphics[width=1.0\textwidth]{fig3.png}
-\caption{Translation Quality Score by Model}
-\label{fig3}
-\end{figure}
-
-\begin{figure}[h]
-\centering
-\includegraphics[width=1.0\textwidth]{fig4.png}
-\caption{Directional Translation Quality}
-\label{fig4}
-\end{figure}
-
-\begin{figure}[h]
-\centering
-\includegraphics[width=1.0\textwidth]{fig5.png}
-\caption{Translation Quality by Category}
-\label{fig5}
-\end{figure}
-
-\begin{table}[htbp]
-\caption{Summary of the Result}
-\begin{center}
-\begin{tabular}{|c|c|c|c|}
-\hline
-\textbf{Model} & \textbf{Cost(₩)} & \textbf{Latency(s)} & \textbf{Translation Quality} \\
-\hline
-GPT-4-turbo & 2.46 & 2.30 & \textbf{93.05} \\
-\hline
-GPT-3.5-turbo & \textbf{0.12} & 1.27 & 89.88 \\
-\hline
-Papago & 1.16 & 0.24 & 90.01 \\
-\hline
-DeepL & 1.92 & 0.45 & 89.42 \\
-\hline
-Google Translator & 1.54 & \textbf{0.16} & 91.75 \\
-\hline
-\end{tabular}
-\label{tab1}
-\end{center}
-\end{table}
-
-\section{Conclusion}
-This study presented a comparative analysis of five machine translation models for Korean-English translation, integrating cost, latency, and LLM-based quality assessment into a unified framework. The results show that GPT-3.5-turbo offers a cost-effective solution for large-scale translation tasks, while Google Translator API provides the best balance between speed and quality for time-sensitive applications. GPT-4-turbo, though slower and more expensive, achieves the highest translation quality and is most suitable for precision-critical contexts such as research and publication. 
-
-The proposed LLM-based evaluation framework demonstrates the potential of using LLMs themselves as evaluators, offering a richer, context-aware measurement of translation quality than traditional metrics. Future research may extend this approach to other language pairs, domains, and related tasks such as multilingual summarization or cross-lingual information retrieval, thereby expanding the practical applications of LLM-based translation evaluation.
-
-\newpage
-
-\chapter{Subtask Detection Optimization for Shopping Agent}
-
-\section{Abstract}
-Large Language Model–enhanced Conversational Recommender Systems (LLMCRS) is a conversational recommender-system framework that employs a large language model as a controller to detect and manage sub-tasks, dynamically match them to specialized expert models for execution, and synthesize the results into natural responses. Subtask detection is a pivotal planning step in LLMCRS; an error at this stage propagates through the entire recommendation pipeline. We identify \emph{lexical bias}—the tendency of an LLM to overfit to descriptive task labels (e.g., \textsc{Search}, \textsc{Chat})—as a major source of misclassification. To counter this, we propose Task-Name Anonymization (TNA), a prompt-level technique that replaces human-readable task names with semantically empty identifiers (\textit{Task-A/B/C}). TNA requires no model fine-tuning and is paired with in-context demonstrations. On 36 real user turns sampled from a live shopping agent, TNA with few-shot prompting achieves 94\% accuracy and 0.94 macro-F1, outperforming a naive prompt by +44\%p accuracy and ablations \textit{w/o Few-shot} (58\%) and \textit{w/o TNA} (89\%).
-
-\section{Introduction}
-Subtask detection is the first and most critical stage in the workflow of an LLM-enhanced conversational recommender system (LLMCRS)~\cite{feng2023large}. At this stage, the Large Language Model (LLM) analyzes the dialogue context to determine which sub-task should be executed for the current user input. This decision governs the entire reasoning pipeline by directing the request to a specialized expert model, such as search, recommendation, or small-talk handling. In existing systems, sub-task detection prompts often include all available task names with human-readable labels (for example, \textsc{Search} or \textsc{Recommendation}), accompanied by brief definitions and few-shot examples. However, these explicit labels introduce what we call \emph{lexical bias}: the model tends to associate the decision directly with surface-level keywords rather than inferring the underlying user intent. As a result, the performance deteriorates when the task names are modified or when the system is applied to a different domain.
-
-To address this issue, we propose a lightweight but effective prompt-engineering method called Task-Name Anonymization (TNA). Instead of using semantically meaningful task names, we replace them with neutral identifiers such as \textit{Task-A}, \textit{Task-B}, or \textit{Task-C}. This anonymization removes the influence of lexical cues and encourages the model to rely on contextual understanding of the dialogue itself. TNA is applied entirely at the prompt level, requiring no model fine-tuning or retraining. When combined with in-context demonstrations, it substantially improves the robustness of task classification across varied user interactions.
-
-\section{Proposed Method}
-We formalize subtask detection as an in-context classification problem. Let $C_t = \{u_1, s_1, \dots, u_t\}$ denote the dialogue context up to turn $t$, where $u_i$ represents user utterances and $s_i$ represents system responses. The planner’s objective is to select a sub-task $y_t \in \mathcal{T}$, where $\mathcal{T}$ is the predefined set of all possible tasks. Given a static prompt $P$, the model receives $P \oplus C_t$ as input and outputs the label $y_t$, which determines which sub-module should be executed.
-
-\subsection{Task-Name Anonymization (TNA)}
-In the proposed TNA framework, descriptive task names are replaced with semantically empty identifiers such as \textit{Task-A}, \textit{Task-B}, or \textit{Task-C}. During both training and inference, the model is exposed only to these anonymized labels. Once the model predicts an anonymized identifier, a post-processing step maps it back to the original task name. This separation ensures that the model cannot exploit superficial word associations. The method is lightweight, easily implemented at the prompt level, and completely agnostic to the internal structure of the LLM.
-
-\subsection{Prompt Template}
-The anonymized prompt template maintains the same structure as the baseline prompt, with the sole difference being that descriptive names are replaced with semantic-free placeholders. Figure~\ref{lst:anonprompt} illustrates this template. By removing the linguistic association between task labels and their meanings, the model is forced to rely on the dialogue content for reasoning rather than memorizing explicit task words.
-
-\begin{figure}[h]
-\centering
-\fbox{\begin{minipage}{0.95\linewidth}
-\footnotesize
-\textbf{System Message}: You are a personalised fashion designer. When you receive a customer message you must choose \textit{one} action: \textit{Task-A}, \textit{Task-B}, or \textit{Task-C}.\\[0.3em]
-\textit{Task-A}: engage in small-talk or gather preference info when a clear recommendation is not yet possible.\\
-\textit{Task-B}: recommend products when the request contains ambiguous terms (e.g., “pretty”) that prevent an SQL query.\\
-\textit{Task-C}: execute an SQL-expressible search when the request is precise (columns: name, category, price, activities, color, gender).\\[0.3em]
-\textit{Instruction}: After reading the customer message, output only one word from \{Task-A, Task-B, Task-C\}.
-\end{minipage}}
-\caption{Example of anonymized prompt template (TNA).}
-\label{lst:anonprompt}
-\end{figure}
-
-\section{Experiments}
-To evaluate the effectiveness of the proposed approach, we conducted experiments using 36 user turns sampled from live production traffic in an operational shopping agent. Each utterance was labeled by two human annotators as belonging to one of three subtasks: \textsc{Chat}, \textsc{Recommendation}, or \textsc{Search}. Any disagreements were resolved through adjudication to ensure label consistency. The dataset distribution was approximately balanced among the three categories.
-
-We compared our full method (TNA combined with few-shot prompting) with three baselines: the standard “ground truth” prompt that uses human-readable task names, a version without few-shot demonstrations, and another version without anonymization (where descriptive task names were retained). The results demonstrated that our proposed method achieved an accuracy of 94\% and a macro-F1 score of 0.94, whereas the ground truth prompt without anonymization reached only 50\% accuracy. When few-shot examples were removed, performance dropped to 58\%, confirming the importance of contextual learning. Without TNA, accuracy remained at 89\%, indicating that anonymization itself contributed meaningfully to robustness.
-
-\begin{table}[h]
-\centering
-\caption{Accuracy and macro-averaged F1 on the 36-utterance dataset.}
-\label{tab:main}
-\begin{tabular}{lcc}
-\hline
-Model & Accuracy & F1 \\
-\hline
-Ground Truth Prompt & 50\% & 0.36 \\
-TNA + Few-shot (ours) & \textbf{94\%} & \textbf{0.94} \\
-Without Few-shot & 58\% & 0.49 \\
-Without TNA & 89\% & 0.89 \\
-\hline
-\end{tabular}
-\end{table}
-
-Overall, the combination of Task-Name Anonymization and few-shot prompting yielded the most stable and accurate classification performance. Few-shot demonstrations were particularly beneficial for teaching contextual reasoning, while anonymization eliminated the model’s tendency to overfit on lexical patterns. The method’s simplicity also made it easy to apply across different domains and languages without any modification to model parameters.
-
-\section{Conclusion}
-This study introduced Task-Name Anonymization (TNA), a prompt-level technique designed to reduce lexical bias in subtask detection for shopping-oriented conversational recommender systems. By concealing the semantic content of task labels and encouraging inference through context, TNA significantly improved classification accuracy without requiring additional training or architectural changes. Empirical evaluations on real user dialogues demonstrated that TNA combined with few-shot prompting improved accuracy from 50\% to 94\%, showing substantial robustness gains over baseline methods. 
-
-The findings highlight that prompt design alone can have a major impact on LLM behavior, even in structured decision-making scenarios such as subtask detection. Future work could explore automatic prompt optimization, cross-lingual generalization, and hierarchical extensions of TNA to handle multi-level task planning in complex dialogue systems.
-
-\newpage
-
-\chapter{Image and Description\hyp{}based Tagging for Shopping Agent}
-
-\section{Abstract}
-In e-commerce platforms, product tags are essential for accurate and efficient search, yet many small-scale online stores lack the resources to manually assign them. A survey of Cafe24-based shopping sites revealed that approximately 90\% of stores with five or fewer employees cannot use product tags due to limited human resources. This absence is particularly detrimental for visually driven categories such as artwork and fashion, where customers often recall products by appearance or seasonal relevance rather than by name.
-
-This study proposes an automated bilingual (English–Korean) product tagging system that leverages both product images and descriptions. For images, GPT-4o’s multimodal capabilities are used to generate descriptive English tags, which are then translated into Korean for cross-lingual matching. For descriptions, a keyword-based mapping approach extracts contextual attributes such as seasonality while minimizing computational cost. Evaluations on two real-world platforms show a 57.7\% reduction in the No-Results Rate (NRR) for a fashion retailer and notable improvements in visual relevance for an artwork store. The results indicate that combining image- and description-based tagging substantially enhances product discoverability and retrieval quality in small-scale e-commerce environments.
-
-\section{Introduction}
-Product discovery is a persistent challenge in e-commerce systems, where search and recommendation engines rely heavily on structured metadata such as product titles, descriptions, and tags~\cite{choi2020semantic}. Manual tagging, though effective, requires substantial human effort and consistency that most small-scale retailers cannot maintain. According to a survey of Cafe24-based stores, about 90\% of small businesses with fewer than five employees do not assign tags to their products at all, largely due to the lack of dedicated marketing staff. The problem is particularly serious for categories such as fashion and art, where users tend to remember products by their visual appearance or seasonal context rather than by textual identifiers.
-
-Existing automated approaches have attempted to generate tags using either textual descriptions or visual recognition, but each suffers from limitations. Text-only tagging fails to reflect visual elements such as texture or color, while purely vision-based models struggle to capture contextual attributes such as seasonality or intended use~\cite{zhang2024recognize}. To address these shortcomings, we develop an integrated bilingual tagging framework that combines multimodal understanding with linguistic flexibility. The system automatically generates English and Korean tags from both product images and textual descriptions, allowing for cross-lingual retrieval and richer metadata coverage.
-
-\section{Proposed Method}
-The proposed system generates bilingual search-friendly tags by combining two complementary sources of information: visual cues from product images and contextual cues from product descriptions. 
-
-In the image-based tagging stage, GPT-4o’s multimodal reasoning capabilities are utilized to generate descriptive English tags from product images. The model receives a prompt designed for art curation and visual understanding, encouraging it to extract stylistic, compositional, and material features of the object in a search-oriented format. Since GPT-4o performs best in English, the generated tags are subsequently translated into Korean using a neural translation model, thereby producing a parallel bilingual tag set. This approach ensures that Korean queries can match both Korean and English metadata, improving retrieval robustness across languages.
-
-In the description-based tagging stage, contextual information from product descriptions is analyzed using a lightweight keyword–tag mapping scheme. Instead of processing entire texts, which can be computationally expensive, the system scans for key terms that imply seasonal or situational relevance. For example, words such as “linen” or “cool-touch” are mapped to the summer season, while “fleece” or “brushed” correspond to winter. This rule-based tagging layer enriches the metadata with contextual attributes while maintaining efficiency suitable for small-scale platforms.
-
-The two sets of tags—image-derived bilingual tags and text-derived seasonal tags—are then merged into a unified metadata structure. This integration allows the search engine to match user queries with both visual and contextual product attributes. When a Korean-language query is entered, it is translated into English and searched against both tag sets. The matched results are merged and ranked based on their overall relevance, ensuring that both cross-lingual and multimodal aspects of the query are reflected in the final retrieval results.
-
-\section{Experiments}
-The proposed method was evaluated using real-world data from two small-scale online retailers: one fashion store (Retailer~A) and one artwork store (Retailer~B). The primary metric for quantitative evaluation was the \emph{No Results Rate} (NRR), defined as the proportion of user queries that return zero results. A lower NRR indicates better search coverage and higher tag quality. For clarity, the improvement is reported in both absolute and relative terms, where relative improvement represents the percentage reduction in NRR compared to the baseline.
-
-In the case of Retailer~A, which operates in the fashion domain, both image-based and description-based tagging components were applied. The baseline period ranged from September~24 to October~8, 2024, and the evaluation period after deployment spanned October~24 to November~7, 2024. During this period, NRR decreased from 14.9\% to 6.3\%, corresponding to an absolute reduction of 8.6 percentage points and a relative improvement of 57.7\%. This substantial decrease implies that many user queries which previously produced zero results were now successfully matched to relevant products, confirming the effectiveness of the tagging pipeline.
-
-\begin{table}[h]
-\centering
-\caption{Retailer~A performance before and after applying image- and description-based tagging.}
-\label{tab:retailerA}
-\begin{tabular}{lcc}
-\toprule
-Metric & Before & After \\
+\caption{Compilation Performance Comparison}
+\label{tab:perf}
+\begin{tabular}{lrr}
+    oprule
+Version & Cold Start (s) & Warm Start (s) 
 \midrule
-$\mathrm{NRR} \ (\%)$ & $14.9$ & $6.3$ \\
-$\Delta \mathrm{NRR}_{\text{abs}}$ & -- & $8.6$ \\
-$\Delta \mathrm{NRR}_{\text{rel}} \ (\%)$ & -- & $57.7$ \\
+TeX Live 2020 & 4.52 & 0.85 
+TeX Live 2025 & 3.10 & 0.42 
 \bottomrule
 \end{tabular}
 \end{table}
 
-For Retailer~B, an art-focused e-commerce platform, the tagging system demonstrated significant qualitative improvements. The examples in this part fall into two categories:  
-(i) previously zero-result queries that became retrievable (Figs.~\ref{fig:retailerB_zero1},~\ref{fig:retailerB_zero2}); and  
-(ii) queries with existing results that gained greater diversity (Figs.~\ref{fig:retailerB_diverse1},~\ref{fig:retailerB_diverse2}).
-
-Figures~\ref{fig:retailerB_zero1} and~\ref{fig:retailerB_zero2} show queries that previously returned no results. The proposed tagging approach (image-based bilingual tags combined with lightweight description-based tags) enabled these queries to retrieve relevant products for the first time.
-
-Figures~\ref{fig:retailerB_diverse1} and~\ref{fig:retailerB_diverse2} illustrate cases where results already existed, but top-ranked items were visually repetitive. The proposed tagging expanded the visual and thematic diversity of retrieved results.
-
-Specifically, previously, users searching for visual themes such as “진주 귀걸이 (pearl earrings)” or “화분 시계 (flowerpot clock)” would receive no results because such visual concepts were missing from text-based metadata. After applying image-based bilingual tagging, these queries successfully retrieved relevant artworks. Similarly, for more generic keywords like “크리스마스 (Christmas)” or “숲 (forest),” the diversity of search results improved, with a broader range of visually and thematically distinct items appearing in the top ranks. These results show that incorporating visual semantics into the tagging pipeline not only increases recall but also enhances the aesthetic diversity of retrieved products.
-
-\begin{figure}[h]
-    \centering
-    \includegraphics[width=\linewidth]{artish_pearl_after.png}
-    \caption{Previously zero-result query enabled by tagging: “진주 귀걸이”.}
-    \label{fig:retailerB_zero1}
-\end{figure}
-
-\begin{figure}[h]
-    \centering
-    \includegraphics[width=\linewidth]{artish_potclock_after.png}
-    \caption{Previously zero-result query enabled by tagging: “화분 시계”.}
-    \label{fig:retailerB_zero2}
-\end{figure}
-
-\begin{figure}[h]
-    \centering
-    \begin{subfigure}[b]{0.48\linewidth}
-        \centering
-        \includegraphics[width=\linewidth]{artish_christmas_before.png}
-        \caption{Before: “크리스마스”}
-        \label{fig:retailerB_diverse1_before}
-    \end{subfigure}
-    \hfill
-    \begin{subfigure}[b]{0.48\linewidth}
-        \centering
-        \includegraphics[width=\linewidth]{artish_christmas_after.png}
-        \caption{After: “크리스마스”}
-        \label{fig:retailerB_diverse1_after}
-    \end{subfigure}
-    \caption{Increased result diversity with tagging: “크리스마스”.}
-    \label{fig:retailerB_diverse1}
-\end{figure}
-
-\begin{figure}[h]
-    \centering
-    \begin{subfigure}[b]{0.48\linewidth}
-        \centering
-        \includegraphics[width=\linewidth]{artish_forest_before.png}
-        \caption{Before: “숲”}
-        \label{fig:retailerB_diverse2_before}
-    \end{subfigure}
-    \hfill
-    \begin{subfigure}[b]{0.48\linewidth}
-        \centering
-        \includegraphics[width=\linewidth]{artish_forest_after.png}
-        \caption{After: “숲”}
-        \label{fig:retailerB_diverse2_after}
-    \end{subfigure}
-    \caption{Increased result diversity with tagging: “숲”.}
-    \label{fig:retailerB_diverse2}
-\end{figure}
-
-Overall, the combination of multimodal and bilingual tagging improved search coverage for visually salient and contextually descriptive queries. The results validate that a hybrid design—where image-based semantic understanding is complemented by lightweight keyword tagging—can achieve both scalability and linguistic adaptability without manual intervention.
-
 \section{Conclusion}
-This study presented a bilingual, multimodal product tagging framework that integrates GPT-4o’s image-based tag generation with a keyword-driven description-based tagging process. The system effectively bridges visual and textual product representations, reducing search failure rates and improving retrieval quality in small-scale e-commerce environments. Empirical evaluations confirmed a 57.7\% reduction in the No Results Rate for a fashion retailer and clear qualitative gains for an art retailer, demonstrating both quantitative and perceptual benefits.
+The integration of TeX Live 2025 into browser-based editors marks a significant milestone. It ensures that researchers can access the latest packages and kernel improvements \cite{lamport1994latex} with zero installation effort.
 
-The proposed approach is particularly advantageous for small and medium-sized merchants that lack the resources for manual tagging. By automating tag generation and supporting cross-lingual retrieval, the system democratizes access to high-quality search infrastructure. Nevertheless, several limitations remain. The quality of image-based tags depends on image clarity and composition, and the method may underperform for abstract or non-visual product types. Furthermore, description-based keyword mapping can only capture predefined contextual cues.
-
-Future research may extend this framework by incorporating multilingual embeddings for more nuanced semantic alignment, expanding description-based tagging beyond seasonality to include materials, styles, and brand attributes, and integrating behavioral signals such as user clicks or purchases for personalized ranking. Ultimately, combining multimodal tagging with LLM-based reasoning could enable fully autonomous metadata generation for next-generation shopping agents.
-
-\newpage
-
-\chapter{LLM-based Reranker for E\hyp{}commerce Search}
-
-\section{Abstract}
-Traditional search-based recommendation systems often rely on fixed metadata-based sorting methods such as sales volume or price. While simple and efficient, these approaches fail to capture the semantic relevance between a user’s query and candidate items. In this study, we propose an \textbf{LLM-based Reranker} that replaces the conventional vector-based reranking stage in a retrieval–rerank pipeline. Our approach directly processes full product descriptions as natural language input, enabling richer contextual understanding and improved semantic matching.
-
-In offline evaluations on 51 representative test cases scored by human raters, the LLM Reranker improved average satisfaction scores from 79.59\% (no reranker) to 89.22\%. In an online deployment for a commercial e-commerce platform, the search-to-traffic ratio increased from 7.66\% before deployment to 9.45\% after deployment, corresponding to a 23.4\% relative increase. These results demonstrate that integrating LLMs into the reranking stage can substantially enhance search quality, increase user satisfaction, and promote more frequent search activity.
-
-\section{Introduction}
-Search-based recommendation systems are generally composed of two main stages: retrieval and reranking~\cite{zhang2025survey}. The retrieval stage narrows down the large candidate pool, often containing millions of items, into a manageable subset using vector similarity search or rule-based filtering. The reranking stage then reorders these candidates based on relevance, personalization, or contextual factors to produce the final ranked list. However, many commercial e-commerce platforms skip the reranking step entirely, relying instead on static metadata such as sales, price, or recency for sorting. This approach is computationally efficient but fails to account for the semantic meaning and intent behind a user’s query.
-
-In domains such as fashion or art, where product discovery depends on descriptive nuances, semantic understanding is critical~\cite{chen2024robust}. Traditional rerankers that rely on vector embeddings compress textual data into fixed representations, losing subtle relationships between words and phrases. Large Language Models (LLMs), by contrast, can process natural language directly, reasoning over full product descriptions and user intents. This enables a deeper alignment between the user’s request and the product’s characteristics.
-
-The goal of this study is to investigate whether an LLM can effectively serve as a reranker by interpreting product descriptions in natural language and directly evaluating semantic relevance. The proposed approach is tested both offline and in live deployment to assess its practical performance in improving user satisfaction and engagement.
-
-\section{Proposed Method}
-The proposed method replaces the conventional vector-based reranking stage with an LLM Reranker. In this approach, the system first retrieves a subset of products using standard search techniques and then applies the LLM to re-evaluate these candidates based on full-text reasoning.
-
-In the retrieval stage, the system filters and ranks items using a combination of embedding-based similarity, rule-based filtering, and approximate nearest neighbor search. These techniques efficiently reduce the candidate pool while preserving recall. Once the initial set of candidates is obtained, the reranker receives structured prompts containing the user’s query, preference profile, and the product descriptions. The LLM processes these inputs and returns a ranked list of product IDs along with brief textual justifications. Because the LLM reasons over the actual language of the descriptions, it can capture semantic relationships that are lost in purely vector-based models.
-
-The prompt used for the reranker is designed to guide the model toward consistent and interpretable outputs. An example is shown in Figure~\ref{lst:rerankerprompt}. The system message describes the LLM’s role as a personalized fashion designer who must recommend products based on a given query and preference. The prompt explicitly asks the model to choose a set number of products, explain the selection in natural language, and return the results in JSON format. This structure allows the reranker to maintain transparency and interpretability while producing outputs compatible with the existing search system.
-
-\begin{figure}[h]
-\centering
-\fbox{\begin{minipage}{0.95\linewidth}
-\footnotesize
-\textbf{System Message}: You're a personalized fashion designer, and you need to look at the following products and recommend clothes that fit the user's needs.  
-Here are the user's query, the user's preference, and the product information. You must choose the most suitable items. \\[0.3em]
-\textbf{User Message}:  
-user input: \{user\_input\} \\
-user preference: \{user\_preference\} \\
-product information: \{product\_information\} \\[0.3em]
-If you decide that none of the products match the user's question, return an empty list and explain the reason. Choose \{top\_k\} products and return their IDs with concise explanations. \\[0.3em]
-Output Format: \\
-\{ \\
-"product\_id": ["product\_id1","product\_id2",...], \\
-"description": ["description1","description2",...] \\
-\} \\
-Please write in JSON format without additional text. Do not wrap the output in code blocks.
-\end{minipage}}
-\caption{Prompt template for the LLM-based reranker.}
-\label{lst:rerankerprompt}
-\end{figure}
-
-\section{Experiments}
-The proposed LLM Reranker was evaluated in two settings: an offline human evaluation and a live online deployment on a commercial e-commerce platform. The offline evaluation tested how accurately the reranker improved perceived search quality, while the online deployment measured its impact on real user behavior.
-
-In the offline experiment, 51 representative queries were selected to cover a variety of user intents and product categories. For each query, two versions of the search engine were compared. The first was a baseline that returned results sorted by fixed metadata such as popularity and price, with no reranking. The second incorporated the LLM Reranker, which re-evaluated the same candidate set based on semantic relevance. Human evaluators rated the search results for each query using a three-level scoring system: 0 for unsatisfactory, 10 for acceptable, and 20 for fully satisfactory. The average score for the baseline system was 79.59\%, while the LLM Reranker achieved an average of 89.22\%, corresponding to a 12.1\% improvement in user satisfaction.
-
-\begin{table}[h]
-\centering
-\caption{Offline evaluation results over 51 test cases. Scores are averaged over all queries.}
-\label{tab:offline_results}
-\begin{tabular}{lcc}
-\hline
-\textbf{Method} & \textbf{Average Score (\%)} & \textbf{Relative Improvement} \\
-\hline
-Without Reranker & 79.59 & -- \\
-With LLM Reranker & 89.22 & +12.1\% \\
-\hline
-\end{tabular}
-\end{table}
-
-For the online evaluation, we measured the Search-to-Traffic Ratio (STR), which represents the proportion of total site visits that included at least one search action. The STR metric reflects user engagement with the search feature and indirectly indicates satisfaction with search results. Before deploying the reranker, the platform recorded an STR of 7.66\%. After deployment, the ratio increased to 9.45\%, marking a relative gain of 23.4\%. This rise suggests that higher-quality search results encouraged users to initiate searches more frequently, leading to deeper engagement with the platform.
-
-\begin{table}[h]
-\centering
-\caption{Online evaluation results before and after LLM Reranker deployment.}
-\label{tab:online_results}
-\begin{tabular}{lcc}
-\hline
-\textbf{Period} & \textbf{STR (\%)} & \textbf{Relative Change} \\
-\hline
-Before Deployment & 7.66 & -- \\
-After Deployment & 9.45 & +23.4\% \\
-\hline
-\end{tabular}
-\end{table}
-
-We acknowledge that an increase in STR could theoretically stem from user frustration, where users conduct repeated searches due to initial retrieval failures. However, considering the concurrent 12.1\% improvement in offline satisfaction scores established in the human evaluation phase, the observed rise in STR is more likely attributable to enhanced user engagement and trust in the search system rather than retrieval dissatisfaction.
-
-\section{Conclusion}
-This study introduced an LLM-based Reranker that leverages large language models to interpret full product descriptions directly during the reranking stage of e-commerce search. Unlike traditional vector-based rerankers, which reduce textual information into fixed-length numerical embeddings, the proposed method preserves the original semantic richness of product descriptions and user queries. By allowing the model to reason in natural language, it can better identify the contextual nuances that determine whether a product truly satisfies a user's intent. This direct reasoning process is particularly beneficial in domains such as fashion and art, where user intent is often expressed through descriptive language rather than precise keywords.
-
-Through both offline and online evaluations, the proposed reranking method demonstrated meaningful improvements in search quality and user engagement. In controlled human evaluations, where expert raters compared the relevance of search results, the LLM Reranker increased the average satisfaction score from 79.59\% to 89.22\%. This indicates that even without retraining or additional fine-tuning, large language models can significantly enhance the semantic alignment between user queries and retrieved items simply by serving as a natural language reasoning layer in the search pipeline. In practical terms, this improvement corresponds to users finding more relevant and visually consistent products with fewer search iterations.
-
-The positive offline results were further validated through online deployment on a live commercial e-commerce platform. The deployment phase focused on measuring the Search-to-Traffic Ratio (STR), a behavioral indicator of how frequently users interact with the search function relative to overall site visits. After integrating the LLM Reranker into the production search flow, the STR increased from 7.66\% to 9.45\%, which corresponds to a 23.4\% relative gain. This result suggests that users not only received more satisfactory search outcomes but also became more motivated to initiate searches again in subsequent sessions. In other words, the quality improvement in search results likely contributed to a positive feedback loop, reinforcing user trust in the search system and encouraging deeper exploration within the platform.
-
-Taken together, these findings demonstrate that large language models can play a practical and effective role beyond conversational interfaces, functioning as reasoning-based modules within existing retrieval systems. The LLM Reranker acts as an intelligent semantic filter that understands descriptive language, assesses the relationship between product features and user preferences, and ranks results accordingly. This approach bridges the gap between rigid vector representations and human perception of relevance, thereby creating a more natural and intuitive search experience. Importantly, these improvements were achieved without major changes to the underlying retrieval architecture, suggesting that similar reranking modules can be integrated into other e-commerce or content-based search systems with minimal engineering overhead.
-
-Despite these encouraging results, certain limitations remain. The current implementation operates with relatively high inference latency compared to traditional vector-based rerankers, which may pose challenges for real-time or high-throughput applications. In addition, because the model’s reasoning is based on natural language prompts, maintaining consistency and reproducibility across different product domains requires careful prompt design and prompt version control. Further engineering efforts could focus on optimizing token efficiency, caching repeated reasoning patterns, or using distilled models to reduce computational costs while retaining semantic depth.
-
-Future research could also extend the current approach in several meaningful directions. One avenue would be to explore hybrid reranking strategies, where vector-based similarity is used for coarse filtering and LLM reasoning provides the final fine-grained ordering. Another direction involves adapting the LLM Reranker for multilingual e-commerce environments, allowing it to handle queries and descriptions written in different languages without the need for machine translation. A third area of interest would be to incorporate multimodal product data—such as images, attributes, and customer reviews—so that the reranker can reason holistically about visual and textual cues together. These extensions would build upon the same principle demonstrated here: that large language models, when used thoughtfully, can capture the subtle semantic relationships that drive user satisfaction and engagement in search-based recommendation systems.
-
-In summary, the proposed LLM-based Reranker offers a simple yet powerful improvement to existing e-commerce search architectures by enhancing the semantic reasoning capabilities of the reranking stage. The empirical results, validated both offline and online, show that the integration of LLMs can lead to measurable increases in user satisfaction and engagement. By bridging the gap between human intent and algorithmic retrieval, this work provides an actionable framework for building more intelligent, context-aware, and human-centered search systems in real-world digital commerce environments.
-
-\newpage
-
-%%% the third chapter of the main body
-\chapter{Conclusion}\label{chap:conclusion}
-
-This thesis presented the design and implementation of an intelligent shopping agent that integrates Large Language Models (LLMs) into multiple components of the e-commerce workflow, including translation, subtask detection, product tagging, and semantic reranking. Each study addressed a distinct challenge in modern shopping systems, but collectively they demonstrated the transformative potential of LLMs in enabling more human-like understanding and interaction within digital commerce.
-
-The first part of this work investigated machine translation quality across Korean–English pairs using an LLM-based evaluation framework. By comparing five translation models—GPT-4-turbo, GPT-3.5-turbo, Google Translator, DeepL, and Papago—the study revealed that GPT-4-turbo achieved the highest translation quality despite its higher cost and latency. The proposed LLM-based scoring approach provided a more context-aware and semantically sensitive alternative to conventional metrics such as BLEU, contributing to more accurate assessment methodologies for multilingual applications.
-
-The second part introduced Task-Name Anonymization (TNA), a prompt-engineering method that mitigates lexical bias in subtask detection for conversational recommender systems. By replacing descriptive task labels with neutral identifiers and combining them with few-shot prompting, TNA achieved 94\% accuracy on real user dialogues without any model fine-tuning. This result demonstrated that prompt design alone can significantly influence LLM behavior, improving robustness and generalization in task planning for dialogue-based agents.
-
-The third part proposed a bilingual, multimodal tagging system that generates product tags from both images and descriptions. Leveraging GPT-4o’s visual understanding and a lightweight keyword–tag mapping mechanism, the system reduced the No Results Rate (NRR) by 57.7\% in a live fashion platform and improved search diversity for an artwork retailer. These findings validated that hybrid multimodal tagging can make small-scale shopping platforms more accessible and semantically rich without requiring manual labor.
-
-The final part developed an LLM-based Reranker that replaces traditional vector-based ranking with natural language reasoning over full product descriptions. In offline evaluations, the reranker improved satisfaction scores by 12.1\%, and in live deployment, it increased the search-to-traffic ratio by 23.4\%. These results confirmed that LLMs can serve as effective ranking engines capable of interpreting intent and meaning beyond keyword or vector similarity.
-
-Taken together, the four studies in this thesis illustrate how LLMs can be embedded as reasoning components within the e-commerce pipeline, enabling deeper semantic understanding, adaptive decision-making, and user-centered experiences. The proposed methods bridge gaps between text, vision, and structured data while maintaining computational and practical feasibility for real-world systems.
-
-Future research directions include improving inference efficiency for real-time deployment, extending cross-lingual generalization through multilingual embeddings, and integrating behavioral signals such as user clicks or preferences into LLM reasoning. Further exploration of hybrid architectures combining symbolic logic and generative reasoning could also enhance reliability and interpretability. Ultimately, this thesis contributes to the foundation for next-generation shopping agents that think, interpret, and interact more like humans, paving the way for intelligent, multimodal, and multilingual commerce ecosystems.
-
-%%% Reference(or Bibliography)r
-\newpage
-\renewcommand\bibname{Reference}
-\addcontentsline{toc}{chapter}{Reference}
-% \begin{thebibliography}{AA}
-% \bibitem {LSTM} Hochreiter, Sepp, and Jürgen Schmidhuber. ``Long short-term memory.'' Neural computation 9.8 (1997): 1735-1780.
-% \bibitem {pure} Hardy, Godfrey Harold. Course of pure mathematics. Courier Dover Publications, 2018.
-% \end{thebibliography}
-\bibliographystyle{ieeetr} % IEEE Transaction style
+\bibliographystyle{ieeetr}
 \bibliography{refs}
+
 \end{document}
