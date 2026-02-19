@@ -8,9 +8,9 @@
 \usepackage{tikz}
 \usetikzlibrary{shapes.geometric, arrows}
 
-    itle{Modern LaTeX Rendering: A Survey of Browser-Based WASM Engines}
-\author{SwiftLatex Demo Team \ \small{Department of Web Engineering, Digital University}}
-\date{    oday}
+\title{Modern LaTeX Rendering: A Survey of Browser-Based WASM Engines}
+\author{SwiftLatex Demo Team \\ \small{Department of Web Engineering, Digital University}}
+\date{\today}
 
 \begin{document}
 
@@ -23,20 +23,17 @@ This paper demonstrates the advanced capabilities of TeX Live 2025 running direc
 \input{introduction}
 
 \section{System Architecture}
-The system leverages a dual-engine approach, supporting both TeX Live 2020 and 2025. This is crucial for reproducibility in scientific research \cite{knuth1984tex}. As shown in Figure ef{fig:arch}, the workflow involves a virtual file system (VFS) synchronized with an asynchronous WASM worker.
+The system leverages a dual-engine approach, supporting both TeX Live 2020 and 2025. This is crucial for reproducibility in scientific research \cite{knuth1984tex}. As shown in Figure \ref{fig:arch}, the workflow involves a virtual file system (VFS) synchronized with an asynchronous WASM worker.
 
 \begin{figure}[h]
 \centering
 \begin{tikzpicture}[node distance=1.5cm]
-    ikzstyle{box} = [rectangle, rounded corners, minimum width=2cm, minimum height=0.8cm,text centered, draw=black, fill=blue!10]
-    ikzstyle{arrow} = [thick,->,>=stealth]
+\tikzstyle{box} = [rectangle, rounded corners, minimum width=2cm, minimum height=0.8cm,text centered, draw=black, fill=blue!10]
+\tikzstyle{arrow} = [thick,->,>=stealth]
 
-
-ode (vfs) [box] {VFS};
-
-ode (worker) [box, below of=vfs] {WASM Worker};
-
-ode (pdf) [box, right of=worker, xshift=1.5cm] {PDF View};
+\node (vfs) [box] {VFS};
+\node (worker) [box, below of=vfs] {WASM Worker};
+\node (pdf) [box, right of=worker, xshift=1.5cm] {PDF View};
 
 \draw [arrow] (vfs) -- (worker);
 \draw [arrow] (worker) -- (pdf);
@@ -53,25 +50,22 @@ V - E + F = 2
 
 Furthermore, we can represent more complex structures such as the Navier-Stokes equations for incompressible flow:
 \begin{equation}
-ho \left( \frac{\partial \mathbf{u}}{\partial t} + \mathbf{u} \cdot 
-abla \mathbf{u} ight) = -
-abla p + \mu 
-abla^2 \mathbf{u} + \mathbf{f}
+\rho \left( \frac{\partial \mathbf{u}}{\partial t} + \mathbf{u} \cdot \nabla \mathbf{u} \right) = -\nabla p + \mu \nabla^2 \mathbf{u} + \mathbf{f}
 \end{equation}
 
 \section{Experimental Results}
-We compared the compilation speed across different TeX Live versions. Table ef{tab:perf} summarizes the average time taken for a standard 10-page document.
+We compared the compilation speed across different TeX Live versions. Table \ref{tab:perf} summarizes the average time taken for a standard 10-page document.
 
 \begin{table}[h]
 \centering
 \caption{Compilation Performance Comparison}
 \label{tab:perf}
 \begin{tabular}{lrr}
-    oprule
-Version & Cold Start (s) & Warm Start (s) 
+\toprule
+Version & Cold Start (s) & Warm Start (s) \\
 \midrule
-TeX Live 2020 & 4.52 & 0.85 
-TeX Live 2025 & 3.10 & 0.42 
+TeX Live 2020 & 4.52 & 0.85 \\
+TeX Live 2025 & 3.10 & 0.42 \\
 \bottomrule
 \end{tabular}
 \end{table}
