@@ -957,17 +957,17 @@ export class LatexEditor {
     this.emit('status', payload)
   }
 
-  private syncAndCompile(): void {
+  private async syncAndCompile(): Promise<void> {
     const status = this.engine.getStatus()
 
     if (status === 'unloaded' || status === 'loading' || status === 'error') return
 
     const modified = this.fs.getModifiedFiles()
 
-    this.ensureEngineDirectories(modified.map((f) => f.path))
+    await this.ensureEngineDirectories(modified.map((f) => f.path))
 
     for (const file of modified) {
-      this.engine.writeFile(file.path, file.content)
+      await this.engine.writeFile(file.path, file.content)
     }
 
     this.fs.markSynced()
@@ -977,7 +977,7 @@ export class LatexEditor {
     this.scheduler.schedule()
   }
 
-  private ensureEngineDirectories(paths: string[]): void {
+  private async ensureEngineDirectories(paths: string[]): Promise<void> {
     const dirs = new Set<string>()
 
     for (const p of paths) {
@@ -993,7 +993,7 @@ export class LatexEditor {
     }
 
     for (const dir of Array.from(dirs).sort()) {
-      this.engine.mkdir(dir)
+      await this.engine.mkdir(dir)
     }
   }
 
@@ -1348,7 +1348,7 @@ export class LatexEditor {
     }
 
     console.log(`[main] BibTeX produced .bbl (${bbl.length} bytes). Writing back to engine...`)
-    this.engine.writeFile(`${mainBase}.bbl`, bbl)
+    await this.engine.writeFile(`${mainBase}.bbl`, bbl)
 
     // Ensure the file is also in our VFS so the user can see it
     this.fs.writeFile(`${mainBase}.bbl`, bbl)
@@ -1362,7 +1362,7 @@ export class LatexEditor {
     // if the references are still not settled (which is normal after first .bbl write)
     this.onCompileResult(r)
 
-    this.syncAndCompile()
+    await this.syncAndCompile()
   }
 
   private async ensureBibtexEngine(): Promise<BibtexEngine | null> {

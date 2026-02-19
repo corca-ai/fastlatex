@@ -290,6 +290,7 @@ self["onmessage"] = function(ev) {
   } else if (cmd === "writefile") {
     try {
       FS.writeFile(WORKROOT + "/" + data.url, data.src);
+      self.postMessage({ "result": "ok", "cmd": "writefile" });
     } catch (e) {
       /* Parent directory may not exist — create it */
       var parts = data.url.split("/");
@@ -298,10 +299,20 @@ self["onmessage"] = function(ev) {
         dir += "/" + parts[i];
         try { FS.mkdir(dir); } catch (e2) { /* exists */ }
       }
-      FS.writeFile(WORKROOT + "/" + data.url, data.src);
+      try {
+        FS.writeFile(WORKROOT + "/" + data.url, data.src);
+        self.postMessage({ "result": "ok", "cmd": "writefile" });
+      } catch(e3) {
+        self.postMessage({ "result": "failed", "cmd": "writefile" });
+      }
     }
   } else if (cmd === "mkdir") {
-    try { FS.mkdir(WORKROOT + "/" + data.url); } catch (e) { /* exists */ }
+    try { 
+      FS.mkdir(WORKROOT + "/" + data.url); 
+      self.postMessage({ "result": "ok", "cmd": "mkdir" });
+    } catch (e) { 
+      self.postMessage({ "result": "failed", "cmd": "mkdir" });
+    }
   } else if (cmd === "readfile") {
     readFileRoutine(data.url);
   } else if (cmd === "settexliveurl") {

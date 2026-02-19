@@ -231,14 +231,17 @@ export class SwiftLatexEngine extends BaseWorkerEngine<WorkerMessage> {
     return result.buffer
   }
 
-  mkdir(path: string): void {
+  async mkdir(path: string): Promise<void> {
     this.checkInitialized()
-    this.worker!.postMessage({ cmd: 'mkdir', url: path })
+    await this.postMessageWithResponse({ cmd: 'mkdir', url: path }, 'cmd:mkdir')
   }
 
-  writeFile(path: string, content: string | Uint8Array): void {
+  async writeFile(path: string, content: string | Uint8Array): Promise<void> {
     this.checkInitialized()
-    this.worker!.postMessage({ cmd: 'writefile', url: path, src: content })
+    await this.postMessageWithResponse(
+      { cmd: 'writefile', url: path, src: content },
+      'cmd:writefile',
+    )
   }
 
   setMainFile(path: string): void {
