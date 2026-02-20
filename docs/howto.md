@@ -7,7 +7,7 @@ This guide explains how to integrate the `LatexEditor` library into your web app
 ```bash
 npm install monaco-editor pdfjs-dist
 # Then install the editor
-npm install @google/latex-editor 
+npm install github:akcorca/latex-editor#main
 ```
 
 **Note:** `monaco-editor` and `pdfjs-dist` are peer dependencies.
@@ -16,11 +16,8 @@ npm install @google/latex-editor
 
 ```typescript
 import { LatexEditor } from 'latex-editor'
-import 'latex-editor/style.css'
 
-const editorContainer = document.getElementById('editor-container')!
-const previewContainer = document.getElementById('preview-container')!
-const editor = new LatexEditor(editorContainer, previewContainer, {
+const editor = new LatexEditor('#editor-container', '#preview-container', {
   files: {
     'main.tex': '\\documentclass{article}\\begin{document}Hello world!\\end{document}'
   }
@@ -28,6 +25,8 @@ const editor = new LatexEditor(editorContainer, previewContainer, {
 
 await editor.init()
 ```
+
+`LatexEditor` bundles the base viewer/editor styles by default; import `latex-editor/style.css` only if you need to host styles separately.
 
 ## Advanced Features
 
@@ -57,7 +56,7 @@ As shown in \cite{knuth1984}, TeX is great.
 Build a minimal layout by giving both editor and preview nodes.
 
 ```typescript
-const editor = new LatexEditor(editorContainer, previewContainer, {
+const editor = new LatexEditor('#editor-container', '#preview-container', {
   files: { 'main.tex': '...' }
 })
 

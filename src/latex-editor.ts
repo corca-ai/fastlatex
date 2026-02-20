@@ -12,6 +12,7 @@ import { registerLatexProviders } from './lsp/register-providers'
 import { parseTraceFile } from './lsp/trace-parser'
 import { initPerfOverlay, perf } from './perf/metrics'
 import { SynctexParser } from './synctex/synctex-parser'
+import './editor-runtime.css'
 import type {
   AppStatus,
   CompileResult,
@@ -38,6 +39,21 @@ function formatBytes(bytes: number): string {
 }
 
 type EventHandler<T> = (event: T) => void
+type EditorContainerInput = string | HTMLElement
+
+function resolveContainer(container: EditorContainerInput, name: string): HTMLElement {
+  const node = typeof container === 'string' ? document.querySelector(container) : container
+
+  if (!node) {
+    throw new Error(`Failed to initialize ${name}.`)
+  }
+
+  if (!(node instanceof HTMLElement)) {
+    throw new Error(`${name} must be a real HTMLElement.`)
+  }
+
+  return node
+}
 
 /** Resolves the base URL for assets like WASM and workers. */
 function resolveAssetBase(provided?: string): string {
@@ -52,6 +68,7 @@ function resolveAssetBase(provided?: string): string {
   try {
     const url = new URL(import.meta.url)
     const path = url.pathname
+    if (path.includes('/node_modules/')) return '/'
     const lastSlash = path.lastIndexOf('/')
     return url.origin + path.substring(0, lastSlash + 1)
   } catch {
@@ -131,8 +148,8 @@ export class LatexEditor {
   private listeners = new Map<string, Set<EventHandler<any>>>()
 
   constructor(
-    editorContainer: HTMLElement,
-    previewContainer: HTMLElement,
+    editorContainer: EditorContainerInput,
+    previewContainer: EditorContainerInput,
     options: LatexEditorOptions = {},
   ) {
     this.opts = options
@@ -175,8 +192,8 @@ export class LatexEditor {
       this.fs = new VirtualFS()
     }
 
-    this.editorContainer = editorContainer
-    this.previewContainer = previewContainer
+    this.editorContainer = resolveContainer(editorContainer, 'editor container')
+    this.previewContainer = resolveContainer(previewContainer, 'preview container')
 
     if (this.editorContainer === null) {
       throw new Error('Failed to initialize editor container.')
@@ -985,7 +1002,7 @@ export class LatexEditor {
   private onCompileResult(result: CompileResult): void {
     perf.end('compile')
 
-    const detail = result.preambleSnapshot ? '(cached preamble)' : undefined
+    const detail = result.preambleSnapshot ? 'cached preamble' : undefined
 
     this.updateEngineMetadata(result)
 

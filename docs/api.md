@@ -5,13 +5,14 @@ Full reference for the `LatexEditor` SDK.
 ## Constructor
 
 ```typescript
-new LatexEditor(editorContainer: HTMLElement, previewContainer: HTMLElement, options?: LatexEditorOptions)
+new LatexEditor(editorContainer: HTMLElement | string, previewContainer: HTMLElement | string, options?: LatexEditorOptions)
 ```
 
 ### Split-container mode
 
 Pass both an editor container and a preview container to render the editor (Monaco)
-and the PDF viewer in any layout you want.
+and the PDF viewer in any layout you want. Each container can be an `HTMLElement`
+or a CSS selector string.
 
 ### Options
 
