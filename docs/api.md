@@ -6,6 +6,15 @@ Full reference for the `LatexEditor` SDK.
 
 ```typescript
 new LatexEditor(editorContainer: HTMLElement | string, previewContainer: HTMLElement | string, options?: LatexEditorOptions)
+
+## Styling
+
+`LatexEditor` does not inject the optional "batteries-included" stylesheet from the JS entrypoint anymore.
+When you use built-in editor/viewer containers (preview panel, binary overlays, loading bar, controls), import:
+
+```ts
+import 'latex-editor/style.css'
+```
 ```
 
 ### Split-container mode

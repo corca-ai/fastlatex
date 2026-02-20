@@ -16,6 +16,7 @@ npm install github:akcorca/latex-editor#main
 
 ```typescript
 import { LatexEditor } from 'latex-editor'
+import 'latex-editor/style.css'
 
 const editor = new LatexEditor('#editor-container', '#preview-container', {
   files: {
@@ -26,7 +27,8 @@ const editor = new LatexEditor('#editor-container', '#preview-container', {
 await editor.init()
 ```
 
-`LatexEditor` bundles the base viewer/editor styles by default; import `latex-editor/style.css` only if you need to host styles separately.
+`LatexEditor` now exposes a dedicated stylesheet entrypoint (`latex-editor/style.css`) and no longer auto-imports it from the JS package entry.
+Import it if you want the default built-in layout and viewer styles.
 
 ## Advanced Features
 
