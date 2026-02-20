@@ -18,8 +18,9 @@ npm install @google/latex-editor
 import { LatexEditor } from 'latex-editor'
 import 'latex-editor/style.css'
 
-const container = document.getElementById('editor-container')!
-const editor = new LatexEditor(container, {
+const editorContainer = document.getElementById('editor-container')!
+const previewContainer = document.getElementById('preview-container')!
+const editor = new LatexEditor(editorContainer, previewContainer, {
   files: {
     'main.tex': '\\documentclass{article}\\begin{document}Hello world!\\end{document}'
   }
@@ -52,12 +53,12 @@ As shown in \cite{knuth1984}, TeX is great.
 })
 ```
 
-### Headless Mode (Custom UI)
-Build your own UI by using `headless: true`.
+### Split-container mode (Editor + PDF only)
+Build a minimal layout by giving both editor and preview nodes. Legacy UI panels
+(file tree, outline, status bar, theme) are not created automatically.
 
 ```typescript
-const editor = new LatexEditor(container, {
-  headless: true,
+const editor = new LatexEditor(editorContainer, previewContainer, {
   files: { 'main.tex': '...' }
 })
 

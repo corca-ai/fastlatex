@@ -63,6 +63,8 @@ function resolveAssetBase(provided?: string): string {
   }
 }
 
+type EditorLayoutMode = 'legacy' | 'split'
+
 export class LatexEditor {
   // --- Options ---
 
@@ -74,7 +76,15 @@ export class LatexEditor {
 
   // --- DOM ---
 
-  private root: HTMLElement
+  private root: HTMLElement | null = null
+
+  private statusElement: HTMLElement | null = null
+
+  private layoutMode: EditorLayoutMode = 'legacy'
+
+  private editorContainer: HTMLElement | null = null
+
+  private previewContainer: HTMLElement | null = null
 
   // --- Components ---
 
@@ -140,8 +150,18 @@ export class LatexEditor {
 
   private listeners = new Map<string, Set<EventHandler<any>>>()
 
-  constructor(container: HTMLElement, options?: LatexEditorOptions) {
-    this.opts = options ?? {}
+  constructor(container: HTMLElement, options?: LatexEditorOptions)
+  constructor(
+    editorContainer: HTMLElement,
+    previewContainer: HTMLElement,
+    options?: LatexEditorOptions,
+  )
+  constructor(
+    container: HTMLElement,
+    previewOrOptions?: HTMLElement | LatexEditorOptions,
+    options: LatexEditorOptions = {},
+  ) {
+    this.opts = previewOrOptions instanceof HTMLElement ? options : (previewOrOptions ?? {})
 
     this.mainFile = this.opts.mainFile ?? 'main.tex'
 
@@ -171,8 +191,6 @@ export class LatexEditor {
       this.setStatus(this.engine.getStatus() as AppStatus, `fetching ${filename}`)
     }
 
-    // Create VFS
-
     if (this.opts.files) {
       this.fs = new VirtualFS({ empty: true })
 
@@ -183,13 +201,272 @@ export class LatexEditor {
       this.fs = new VirtualFS()
     }
 
-    // Build DOM
+    if (previewOrOptions instanceof HTMLElement) {
+      // New constructor shape:
+      // new LatexEditor(editorContainer, previewContainer, options?)
+      // (headless mode is ignored in this form, because preview is always supplied).
+      this.layoutMode = 'split'
+      this.editorContainer = container
+      this.previewContainer = previewOrOptions
+    } else {
+      this.layoutMode = 'legacy'
+      this.root = this.createDOM(container)
 
-    this.root = this.createDOM(container)
+      const editorContainer = this.root.querySelector<HTMLElement>('.le-editor')
 
-    // Initialize sub-components
+      const previewContainer = this.root.querySelector<HTMLElement>('.le-viewer')
+
+      this.editorContainer = editorContainer
+      this.previewContainer = previewContainer
+      this.statusElement = this.root.querySelector<HTMLElement>('#status')
+
+      if (this.editorContainer === null) {
+        throw new Error('Failed to initialize editor container.')
+      }
+
+      if (this.previewContainer === null) {
+        throw new Error('Failed to initialize preview container.')
+      }
+    }
 
     this.initComponents()
+  }
+
+  private isLegacyMode(): boolean {
+    return this.layoutMode === 'legacy'
+  }
+
+  private initComponents(): void {
+    const isLegacy = this.isLegacyMode()
+    const isHeadless = isLegacy && !!this.opts.headless
+
+    this.initViewer(isHeadless, isLegacy)
+    this.initScheduler()
+    this.initProjectModels()
+    this.initEditorState()
+    this.initLegacyPanels(isLegacy)
+    this.initBinaryPreview()
+    this.initEditorInteraction(isHeadless, isLegacy)
+    this.initRuntimeServices()
+
+    if (isLegacy) {
+      this.initSelectors()
+    }
+  }
+
+  private initViewer(isHeadless: boolean, isLegacy: boolean): void {
+    if (isHeadless) return
+
+    if (!this.previewContainer) {
+      throw new Error('Preview container is not initialized.')
+    }
+
+    this.pdfViewer = new PdfViewer(this.previewContainer)
+
+    this.pdfViewer.setInverseSearchHandler((loc) => {
+      this.revealLine(loc.line, loc.file)
+    })
+
+    if (!isLegacy) return
+
+    const errorLogContainer = this.root?.querySelector<HTMLElement>('.le-error-log')
+    if (!errorLogContainer) throw new Error('Error log container is not initialized.')
+
+    this.errorLog = new ErrorLog(errorLogContainer, (file, line) => {
+      this.revealLine(line, file)
+    })
+  }
+
+  private initScheduler(): void {
+    this.scheduler = new CompileScheduler(
+      this.engine,
+      (result) => this.onCompileResult(result),
+      (status, detail) => this.setStatus(status, detail),
+      { minDebounceMs: 50, maxDebounceMs: 1000 },
+    )
+  }
+
+  private initProjectModels(): void {
+    for (const path of this.fs.listFiles()) {
+      const file = this.fs.getFile(path)
+
+      if (file && typeof file.content === 'string') {
+        this.ensureModel(path, file.content)
+
+        if (path.endsWith('.tex')) {
+          this.projectIndex.updateFile(path, file.content)
+        }
+      }
+    }
+
+    this.updateBibIndex()
+
+    if (!this.models.has(this.currentFile)) {
+      this.ensureModel(this.currentFile, '')
+    }
+  }
+
+  private initEditorState(): void {
+    if (!this.editorContainer) {
+      throw new Error('Editor container is not initialized.')
+    }
+
+    const initialModel = this.models.get(this.currentFile)
+
+    if (!initialModel) {
+      throw new Error('Initial model is not available.')
+    }
+
+    this.editor = createEditor(this.editorContainer, initialModel)
+
+    const editorService = (this.editor as any)._codeEditorService
+    const originalOpenCodeEditor = editorService.openCodeEditor.bind(editorService)
+
+    editorService.openCodeEditor = async (input: any, source: any, sideBySide: any) => {
+      const result = await originalOpenCodeEditor(input, source, sideBySide)
+
+      if (!result && input.resource) {
+        const uri = input.resource.toString()
+
+        for (const [path, model] of this.models.entries()) {
+          if (model.uri.toString() === uri) {
+            this.onFileSelect(path)
+
+            if (input.options?.selection) {
+              const range = input.options.selection
+
+              this.editor.setSelection(range)
+
+              this.editor.revealRangeInCenter(range)
+            }
+
+            return true
+          }
+        }
+      }
+
+      return result
+    }
+  }
+
+  private initLegacyPanels(isLegacy: boolean): void {
+    if (!isLegacy || !this.root) return
+
+    const fileTreeContainer = this.root.querySelector<HTMLElement>('.le-file-tree')
+    if (!fileTreeContainer) throw new Error('File tree container is not initialized.')
+
+    this.fileTree = new FileTree(fileTreeContainer, this.fs, (path) => this.onFileSelect(path))
+
+    const outlineContainer = this.root.querySelector<HTMLElement>('.le-outline')
+    if (!outlineContainer) throw new Error('Outline container is not initialized.')
+
+    this.outline = new Outline(outlineContainer, this.projectIndex, (line) =>
+      revealLine(this.editor, line),
+    )
+
+    this.outline.update(this.currentFile)
+  }
+
+  private initBinaryPreview(): void {
+    this.previewEl = document.createElement('div')
+    this.previewEl.className = 'binary-preview'
+    this.previewEl.style.display = 'none'
+    this.editorContainer?.appendChild(this.previewEl)
+  }
+
+  private initEditorInteraction(isHeadless: boolean, isLegacy: boolean): void {
+    this.editor.onDidChangeModel(() => {
+      const model = this.editor.getModel()
+
+      if (this.switchingModel || !model) return
+
+      for (const [path, m] of this.models.entries()) {
+        if (m !== model) continue
+
+        if (this.currentFile !== path) {
+          this.currentFile = path
+
+          this.fileTree?.setActive(path)
+
+          this.outline?.update(path)
+
+          this.emitOutline()
+
+          this.runDiagnostics()
+        }
+
+        break
+      }
+    })
+
+    this.editor.onDidChangeCursorPosition(() => {
+      if (this.switchingModel) return
+
+      const pos = this.editor.getPosition()
+
+      if (!pos) return
+
+      this.outline?.setActiveLine(pos.lineNumber)
+
+      this.emit('cursorChange', {
+        path: this.currentFile,
+        line: pos.lineNumber,
+        column: pos.column,
+      })
+
+      if (pos.lineNumber === this.lastForwardLine && this.currentFile === this.lastForwardFile)
+        return
+
+      this.lastForwardLine = pos.lineNumber
+
+      this.lastForwardFile = this.currentFile
+
+      if (this.forwardSearchTimer) clearTimeout(this.forwardSearchTimer)
+
+      this.forwardSearchTimer = setTimeout(() => {
+        this.pdfViewer?.forwardSearch(this.currentFile, pos.lineNumber)
+      }, 100)
+    })
+
+    this.editor.addAction({
+      id: 'latex.save-compile',
+
+      label: 'Save & Compile',
+
+      keybindings: [2048 /* CtrlCmd */ | 49 /* KeyS */],
+
+      run: () => {
+        this.syncAndCompile()
+
+        this.scheduler.flush()
+      },
+    })
+
+    if (isHeadless) return
+
+    this.pdfViewer?.setDownloadHandler(() => this.downloadPdf())
+
+    if (isLegacy && this.root) {
+      setupDividers(this.root)
+    }
+  }
+
+  private initRuntimeServices(): void {
+    this.lspDisposables = registerLatexProviders(this.projectIndex, this.fs)
+
+    initPerfOverlay()
+
+    window.addEventListener('unhandledrejection', (e) => {
+      if (e.reason?.message === 'Canceled' || e.reason === 'You cannot rename this element.') {
+        e.preventDefault()
+      }
+    })
+
+    if (this.opts.serviceWorker !== false && 'serviceWorker' in navigator) {
+      navigator.serviceWorker.register(`${this.assetBaseUrl}sw.js`).catch((err) => {
+        console.warn('SW registration failed:', err)
+      })
+    }
   }
 
   // ------------------------------------------------------------------
@@ -525,7 +802,7 @@ export class LatexEditor {
 
     this.listeners.clear()
 
-    this.root.remove()
+    this.root?.remove()
   }
 
   // ------------------------------------------------------------------
@@ -632,261 +909,21 @@ export class LatexEditor {
     return root
   }
 
-  // ------------------------------------------------------------------
-
-  // Private: Component init
-
-  // ------------------------------------------------------------------
-
-  private initComponents(): void {
-    const isHeadless = !!this.opts.headless
-
-    if (!isHeadless) {
-      // PDF Viewer
-
-      const viewerContainer = this.root.querySelector<HTMLElement>('.le-viewer')!
-
-      this.pdfViewer = new PdfViewer(viewerContainer)
-
-      // Inverse search (PDF click → source)
-
-      this.pdfViewer.setInverseSearchHandler((loc) => {
-        this.revealLine(loc.line, loc.file)
-      })
-
-      // Error Log
-
-      const errorLogContainer = this.root.querySelector<HTMLElement>('.le-error-log')!
-
-      this.errorLog = new ErrorLog(errorLogContainer, (file, line) => {
-        this.revealLine(line, file)
-      })
-    }
-
-    // Compile Scheduler
-
-    this.scheduler = new CompileScheduler(
-      this.engine,
-
-      (result) => this.onCompileResult(result),
-
-      (status, detail) => this.setStatus(status, detail),
-
-      { minDebounceMs: 50, maxDebounceMs: 1000 },
-    )
-
-    // Create models for all text files and index .tex files
-
-    for (const path of this.fs.listFiles()) {
-      const file = this.fs.getFile(path)
-
-      if (file && typeof file.content === 'string') {
-        this.ensureModel(path, file.content)
-
-        if (path.endsWith('.tex')) {
-          this.projectIndex.updateFile(path, file.content)
-        }
-      }
-    }
-
-    this.updateBibIndex()
-
-    // Ensure current file has a model (even if empty)
-
-    if (!this.models.has(this.currentFile)) {
-      this.ensureModel(this.currentFile, '')
-    }
-
-    // Editor (uses pre-created model)
-
-    const editorContainer = this.root.querySelector<HTMLElement>('.le-editor')!
-
-    this.editor = createEditor(editorContainer, this.models.get(this.currentFile)!)
-
-    // Support cross-file navigation (Goto Definition)
-
-    const editorService = (this.editor as any)._codeEditorService
-
-    const originalOpenCodeEditor = editorService.openCodeEditor.bind(editorService)
-
-    editorService.openCodeEditor = async (input: any, source: any, sideBySide: any) => {
-      const result = await originalOpenCodeEditor(input, source, sideBySide)
-
-      if (!result && input.resource) {
-        const uri = input.resource.toString()
-
-        for (const [path, model] of this.models.entries()) {
-          if (model.uri.toString() === uri) {
-            this.onFileSelect(path)
-
-            if (input.options?.selection) {
-              const range = input.options.selection
-
-              this.editor.setSelection(range)
-
-              this.editor.revealRangeInCenter(range)
-            }
-
-            return true
-          }
-        }
-      }
-
-      return result
-    }
-
-    if (!isHeadless) {
-      // File Tree
-
-      const fileTreeContainer = this.root.querySelector<HTMLElement>('.le-file-tree')!
-
-      this.fileTree = new FileTree(fileTreeContainer, this.fs, (path) => this.onFileSelect(path))
-
-      // Outline
-
-      const outlineContainer = this.root.querySelector<HTMLElement>('.le-outline')!
-
-      this.outline = new Outline(outlineContainer, this.projectIndex, (line) =>
-        revealLine(this.editor, line),
-      )
-
-      this.outline.update(this.currentFile)
-    }
-
-    // Binary file preview overlay
-
-    this.previewEl = document.createElement('div')
-
-    this.previewEl.className = 'binary-preview'
-
-    this.previewEl.style.display = 'none'
-
-    editorContainer.appendChild(this.previewEl)
-
-    // Sync state when model changes (e.g. Goto Definition)
-
-    this.editor.onDidChangeModel(() => {
-      const model = this.editor.getModel()
-
-      if (this.switchingModel) return
-
-      if (!model) return
-
-      for (const [path, m] of this.models.entries()) {
-        if (m === model) {
-          if (this.currentFile !== path) {
-            this.currentFile = path
-
-            this.fileTree?.setActive(path)
-
-            this.outline?.update(path)
-
-            this.emitOutline()
-
-            this.runDiagnostics()
-          }
-
-          break
-        }
-      }
-    })
-
-    // Forward search (auto on cursor move, debounced)
-
-    this.editor.onDidChangeCursorPosition(() => {
-      if (this.switchingModel) return
-
-      const pos = this.editor.getPosition()
-
-      if (!pos) return
-
-      // Update outline highlight
-
-      this.outline?.setActiveLine(pos.lineNumber)
-
-      this.emit('cursorChange', {
-        path: this.currentFile,
-        line: pos.lineNumber,
-        column: pos.column,
-      })
-
-      if (pos.lineNumber === this.lastForwardLine && this.currentFile === this.lastForwardFile)
-        return
-
-      this.lastForwardLine = pos.lineNumber
-
-      this.lastForwardFile = this.currentFile
-
-      if (this.forwardSearchTimer) clearTimeout(this.forwardSearchTimer)
-
-      this.forwardSearchTimer = setTimeout(() => {
-        this.pdfViewer?.forwardSearch(this.currentFile, pos.lineNumber)
-      }, 100)
-    })
-
-    // Ctrl+S: flush debounce and compile immediately
-
-    this.editor.addAction({
-      id: 'latex.save-compile',
-
-      label: 'Save & Compile',
-
-      keybindings: [2048 /* CtrlCmd */ | 49 /* KeyS */],
-
-      run: () => {
-        this.syncAndCompile()
-
-        this.scheduler.flush()
-      },
-    })
-
-    if (!isHeadless) {
-      // PDF Download button (in PDF viewer overlay)
-
-      this.pdfViewer?.setDownloadHandler(() => this.downloadPdf())
-
-      // Layout dividers
-
-      setupDividers(this.root)
-    }
-
-    // Register LSP providers
-
-    this.lspDisposables = registerLatexProviders(this.projectIndex, this.fs)
-
-    // Perf overlay (activate with ?perf=1)
-
-    initPerfOverlay()
-
-    // Suppress Monaco's internal "Canceled" promise rejections on model switch
-    // and custom RenameProvider rejections
-    window.addEventListener('unhandledrejection', (e) => {
-      if (e.reason?.message === 'Canceled' || e.reason === 'You cannot rename this element.') {
-        e.preventDefault()
-      }
-    })
-
-    // Service Worker
-
-    if (this.opts.serviceWorker !== false && 'serviceWorker' in navigator) {
-      navigator.serviceWorker.register(`${this.assetBaseUrl}sw.js`).catch((err) => {
-        console.warn('SW registration failed:', err)
-      })
-    }
-
-    this.initSelectors()
-  }
-
   private initSelectors(): void {
+    if (!this.root) return
+
     const tlSelector = this.root.querySelector<HTMLSelectElement>('#texlive-version')
     const projSelector = this.root.querySelector<HTMLSelectElement>('#project-select')
 
     const url = new URL(window.location.href)
 
     if (tlSelector) {
-      tlSelector.value = this.opts.texliveVersion || '2025'
-      tlSelector.addEventListener('change', () => {
-        const newVersion = tlSelector.value as TexliveVersion
+      const versionSelector = tlSelector
+
+      versionSelector.value = this.opts.texliveVersion || '2025'
+
+      versionSelector.addEventListener('change', () => {
+        const newVersion = versionSelector.value as TexliveVersion
         if (newVersion === this.opts.texliveVersion) return
         url.searchParams.set('tl', newVersion)
         window.location.href = url.toString()
@@ -894,9 +931,12 @@ export class LatexEditor {
     }
 
     if (projSelector) {
-      projSelector.value = url.searchParams.get('proj') || 'default'
-      projSelector.addEventListener('change', () => {
-        const newProj = projSelector.value
+      const projectSelector = projSelector
+
+      projectSelector.value = url.searchParams.get('proj') || 'default'
+
+      projectSelector.addEventListener('change', () => {
+        const newProj = projectSelector.value
         url.searchParams.set('proj', newProj)
         window.location.href = url.toString()
       })
@@ -930,7 +970,7 @@ export class LatexEditor {
       this.pdfViewer.setLoadingStatus(label)
     }
 
-    const statusEl = this.root.querySelector('#status')
+    const statusEl = this.statusElement ?? null
 
     if (statusEl) {
       const labels: Record<AppStatus, string> = {

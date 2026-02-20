@@ -6,7 +6,14 @@ Full reference for the `LatexEditor` SDK.
 
 ```typescript
 new LatexEditor(container: HTMLElement, options?: LatexEditorOptions)
+new LatexEditor(editorContainer: HTMLElement, previewContainer: HTMLElement, options?: LatexEditorOptions)
 ```
+
+### Split-container mode
+
+Pass both an editor container and a preview container to render only the two core UI panels:
+editor (Monaco) and PDF viewer. This mode lets your app control panel placement and
+page layout.
 
 ### Options
 
@@ -17,7 +24,7 @@ new LatexEditor(container: HTMLElement, options?: LatexEditorOptions)
 | `files` | `Record` | `{}` | Initial project files (path -> content) |
 | `serviceWorker`| `boolean`| `true` | Cache texlive packages via SW |
 | `assetBaseUrl` | `string` | `auto` | Base URL for WASM/Worker assets |
-| `headless` | `boolean`| `false` | Only render Monaco (no sidebar/viewer) |
+| `headless` | `boolean`| `false` | Only affects legacy single-container mode; in split-container mode it is ignored |
 
 ## Methods
 
