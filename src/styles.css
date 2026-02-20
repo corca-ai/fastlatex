@@ -3,7 +3,6 @@ body {
 }
 
 #app {
-  display: flex;
   width: 100vw;
   height: 100vh;
   min-height: 0;
@@ -63,12 +62,16 @@ body {
 
 .le-file-tree {
   flex: 1;
+  display: flex;
+  flex-direction: column;
   overflow-y: auto;
   min-height: 100px;
 }
 
 .le-outline {
   flex: 1;
+  display: flex;
+  flex-direction: column;
   overflow-y: auto;
   border-top: 1px solid #404040;
   min-height: 100px;
@@ -128,6 +131,31 @@ body {
   padding: 0 10px;
   font-size: 12px;
   flex-shrink: 0;
+}
+
+#status {
+  display: inline-flex;
+}
+
+#status-detail {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 11px;
+}
+
+#file-tree-list,
+#outline-list,
+#error-log-list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+#recompile-btn {
+  margin-left: 8px;
+}
+
+#file-tree-panel {
+  min-width: 220px;
 }
 
 .le-version-info {
