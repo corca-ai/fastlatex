@@ -56,6 +56,12 @@ export interface LatexEditorOptions {
   assetBaseUrl?: string
   /** If true, do not attempt to preload the base .fmt file from the server. */
   skipFormatPreload?: boolean
+  /** Optional class name(s) to add to the editor container. */
+  editorContainerClassName?: string
+  /** Optional class name(s) to add to the preview container. */
+  previewContainerClassName?: string
+  /** Attribute used to scope runtime styles. Defaults to `data-latex-editor-runtime`. */
+  runtimeScopeAttribute?: string
 }
 
 export interface LatexEditorEventMap {

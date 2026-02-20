@@ -1,4 +1,4 @@
-.binary-preview {
+[data-latex-editor-runtime] .binary-preview {
   position: absolute;
   top: 0;
   left: 0;
@@ -11,19 +11,19 @@
   z-index: 10;
 }
 
-.binary-preview-img {
+[data-latex-editor-runtime] .binary-preview-img {
   max-width: 90%;
   max-height: 90%;
   object-fit: contain;
 }
 
-.binary-preview-info {
+[data-latex-editor-runtime] .binary-preview-info {
   color: #888;
   font-size: 14px;
 }
 
 /* PDF viewer loading overlay */
-.pdf-loading-overlay {
+[data-latex-editor-runtime] .pdf-loading-overlay {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -33,12 +33,12 @@
   flex: 1;
 }
 
-.pdf-loading-text {
+[data-latex-editor-runtime] .pdf-loading-text {
   font-size: 13px;
   color: #888;
 }
 
-.pdf-loading-bar {
+[data-latex-editor-runtime] .pdf-loading-bar {
   width: 160px;
   height: 3px;
   background: #444;
@@ -46,7 +46,7 @@
   overflow: hidden;
 }
 
-.pdf-loading-bar-fill {
+[data-latex-editor-runtime] .pdf-loading-bar-fill {
   width: 10%;
   height: 100%;
   background: #007acc;
@@ -55,16 +55,16 @@
 }
 
 /* PDF viewer */
-.pdf-page-container {
+[data-latex-editor-runtime] .pdf-page-container {
   margin-bottom: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
-.pdf-page-container canvas {
+[data-latex-editor-runtime] .pdf-page-container canvas {
   display: block;
 }
 
-.pdf-controls {
+[data-latex-editor-runtime] .pdf-controls {
   position: sticky;
   top: 0;
   z-index: 10;
@@ -77,7 +77,7 @@
   margin-bottom: 8px;
 }
 
-.pdf-download-btn {
+[data-latex-editor-runtime] .pdf-download-btn {
   background: #404040;
   border: none;
   color: #ccc;
@@ -88,11 +88,11 @@
   margin-left: auto;
 }
 
-.pdf-download-btn:hover {
+[data-latex-editor-runtime] .pdf-download-btn:hover {
   background: #505050;
 }
 
-.pdf-controls button {
+[data-latex-editor-runtime] .pdf-controls button {
   background: #404040;
   border: none;
   color: #ccc;
@@ -102,21 +102,21 @@
   font-size: 12px;
 }
 
-.pdf-controls button:hover {
+[data-latex-editor-runtime] .pdf-controls button:hover {
   background: #505050;
 }
 
-.pdf-controls span {
+[data-latex-editor-runtime] .pdf-controls span {
   font-size: 12px;
   color: #999;
 }
 
-.pdf-controls .zoom-label {
+[data-latex-editor-runtime] .pdf-controls .zoom-label {
   cursor: pointer;
   min-width: 36px;
   text-align: center;
 }
 
-.pdf-controls .zoom-label:hover {
+[data-latex-editor-runtime] .pdf-controls .zoom-label:hover {
   color: #ccc;
 }

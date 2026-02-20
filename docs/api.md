@@ -32,6 +32,10 @@ or a CSS selector string.
 | `files` | `Record` | `{}` | Initial project files (path -> content) |
 | `serviceWorker`| `boolean`| `true` | Cache texlive packages via SW |
 | `assetBaseUrl` | `string` | `auto` | Base URL for WASM/Worker assets |
+| `skipFormatPreload` | `boolean` | `false` | Skip initial `.fmt` preload during engine bootstrap |
+| `editorContainerClassName` | `string` | `''` | Extra class name(s) for the editor container |
+| `previewContainerClassName` | `string` | `''` | Extra class name(s) for the preview container |
+| `runtimeScopeAttribute` | `string` | `data-latex-editor-runtime` | Attribute used to scope runtime UI styles |
 ## Methods
 
 - `init(): Promise<void>`: Initializes the WASM engines and runs the first compilation.

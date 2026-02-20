@@ -119,6 +119,8 @@ export class LatexEditor {
 
   private currentFile: string
 
+  private runtimeScopeAttribute = 'data-latex-editor-runtime'
+
   private pendingRecompile = false
 
   private editorChangeDisposable: { dispose(): void } | null = null
@@ -207,6 +209,7 @@ export class LatexEditor {
   }
 
   private initComponents(): void {
+    this.applyContainerBindings()
     this.initViewer()
     this.initScheduler()
     this.initProjectModels()
@@ -214,6 +217,25 @@ export class LatexEditor {
     this.initBinaryPreview()
     this.initEditorInteraction()
     this.initRuntimeServices()
+  }
+
+  private applyContainerBindings(): void {
+    if (!this.editorContainer || !this.previewContainer) return
+
+    this.runtimeScopeAttribute = this.opts.runtimeScopeAttribute?.trim() || this.runtimeScopeAttribute
+
+    this.editorContainer.setAttribute(this.runtimeScopeAttribute, '')
+    this.previewContainer.setAttribute(this.runtimeScopeAttribute, '')
+
+    if (this.opts.editorContainerClassName) {
+      this.editorContainer.classList.add(...this.opts.editorContainerClassName.split(/\s+/).filter(Boolean))
+    }
+
+    if (this.opts.previewContainerClassName) {
+      this.previewContainer.classList.add(
+        ...this.opts.previewContainerClassName.split(/\s+/).filter(Boolean),
+      )
+    }
   }
 
   private initViewer(): void {
