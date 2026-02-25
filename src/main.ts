@@ -1,6 +1,13 @@
+import { configureMonacoWorkers } from './editor/setup'
 import { FastLatex } from './fastlatex'
 import type { SectionDef } from './lsp/types'
+import { configurePdfjsWorker } from './viewer/pdf-viewer'
 import './styles.css'
+
+// Configure workers for the demo app — must happen before FastLatex is created
+// so that the bundler (Vite) resolves the worker files from node_modules.
+configureMonacoWorkers()
+configurePdfjsWorker()
 
 const editorContainer = document.getElementById('editor-container')!
 const previewContainer = document.getElementById('preview-container')!

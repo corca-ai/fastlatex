@@ -5,23 +5,83 @@ This guide explains how to integrate the `FastLatex` library into your web appli
 ## Installation
 
 ```bash
+# npm
 npm install monaco-editor pdfjs-dist
-# Then install the editor
 npm install github:corca-ai/fastlatex#main
+
+# bun
+bun add monaco-editor pdfjs-dist
+bun add github:corca-ai/fastlatex#main
 ```
 
-**Note:** `monaco-editor` and `pdfjs-dist` are peer dependencies.
+**Note:** `monaco-editor` and `pdfjs-dist` are peer dependencies and must be installed separately.
 
 ## What's Included
 
 TeX Live packages are served from a **public CDN** — no setup or hosting required. The library fetches packages on demand during compilation and caches them via a Service Worker for offline use.
 
+## Worker Setup (Required)
+
+FastLaTeX depends on **Monaco Editor** and **pdfjs-dist** web workers. Because these are peer dependencies (not bundled into the library), **your bundler** must resolve and bundle the worker files from your own `node_modules`.
+
+Add the following setup code **before** creating a `FastLatex` instance:
+
+```typescript
+import * as pdfjsLib from 'pdfjs-dist'
+
+// Monaco workers — required for the code editor
+self.MonacoEnvironment = {
+  getWorker(_workerId: string, label: string) {
+    if (label === 'json') {
+      return new Worker(
+        new URL('monaco-editor/esm/vs/language/json/json.worker.js', import.meta.url),
+        { type: 'module' },
+      )
+    }
+    return new Worker(
+      new URL('monaco-editor/esm/vs/editor/editor.worker.js', import.meta.url),
+      { type: 'module' },
+    )
+  },
+}
+
+// pdfjs worker — required for PDF preview
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+  'pdfjs-dist/build/pdf.worker.mjs',
+  import.meta.url,
+).toString()
+```
+
+> **Why is this needed?** The `new URL(…, import.meta.url)` pattern must appear in **your** source code so that your bundler (Vite, webpack, etc.) can locate the worker files in `node_modules` and emit them as separate chunks. The library cannot do this on your behalf because the worker URLs would be resolved relative to the pre-built library bundle, not your project.
+
 ## Basic Usage
 
 ```typescript
+import * as pdfjsLib from 'pdfjs-dist'
 import { FastLatex } from 'fastlatex'
 import 'fastlatex/style.css'
 
+// 1. Worker setup (see section above)
+self.MonacoEnvironment = {
+  getWorker(_workerId: string, label: string) {
+    if (label === 'json') {
+      return new Worker(
+        new URL('monaco-editor/esm/vs/language/json/json.worker.js', import.meta.url),
+        { type: 'module' },
+      )
+    }
+    return new Worker(
+      new URL('monaco-editor/esm/vs/editor/editor.worker.js', import.meta.url),
+      { type: 'module' },
+    )
+  },
+}
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+  'pdfjs-dist/build/pdf.worker.mjs',
+  import.meta.url,
+).toString()
+
+// 2. Create editor
 const editor = new FastLatex('#editor-container', '#preview-container', {
   files: {
     'main.tex': '\\documentclass{article}\\begin{document}Hello world!\\end{document}'
@@ -31,7 +91,7 @@ const editor = new FastLatex('#editor-container', '#preview-container', {
 await editor.init()
 ```
 
-`FastLatex` now exposes a dedicated stylesheet entrypoint (`fastlatex/style.css`) and no longer auto-imports it from the JS package entry.
+`FastLatex` exposes a dedicated stylesheet entrypoint (`fastlatex/style.css`) and does not auto-import it from the JS entry.
 Import it if you want the default built-in layout and viewer styles.
 
 ## Advanced Features
@@ -80,7 +140,7 @@ If your application already manages a Monaco editor, pass it via the `editor` op
 #### Setup
 
 You are responsible for:
-1. **Monaco worker configuration** — set `MonacoEnvironment.getWorker` yourself, since FastLaTeX only configures workers when it creates its own editor.
+1. **Worker configuration** — set up Monaco and pdfjs workers as described in [Worker Setup](#worker-setup-required).
 2. **Editor creation and disposal** — FastLaTeX will **not** dispose your editor when `latex.dispose()` is called.
 
 FastLaTeX handles:
@@ -92,10 +152,11 @@ FastLaTeX handles:
 
 ```typescript
 import * as monaco from 'monaco-editor'
+import * as pdfjsLib from 'pdfjs-dist'
 import { FastLatex, ensureLanguagesRegistered } from 'fastlatex'
 import 'fastlatex/style.css'
 
-// 1. Configure Monaco workers (your responsibility)
+// 1. Configure workers (see Worker Setup section)
 self.MonacoEnvironment = {
   getWorker(_workerId, label) {
     if (label === 'json') {
@@ -110,6 +171,10 @@ self.MonacoEnvironment = {
     )
   },
 }
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+  'pdfjs-dist/build/pdf.worker.mjs',
+  import.meta.url,
+).toString()
 
 // 2. Register LaTeX/BibTeX languages before creating the editor
 //    so that syntax highlighting is available from the start.

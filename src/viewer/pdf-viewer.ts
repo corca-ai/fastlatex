@@ -5,12 +5,43 @@ import type { SourceLocation } from '../synctex/text-mapper'
 import { TextMapper } from '../synctex/text-mapper'
 import { PageRenderer } from './page-renderer'
 
-// Single shared worker instance — avoids re-fetching pdf.worker.mjs on every render
-pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-  'pdfjs-dist/build/pdf.worker.mjs',
-  import.meta.url,
-).toString()
-const pdfWorker = new pdfjsLib.PDFWorker()
+// Single shared worker instance — avoids re-fetching pdf.worker.mjs on every render.
+// When consumed as a library, the consumer should call configurePdfjsWorker() in
+// their own source so that their bundler resolves the worker file.
+// Lazy-init: the first PdfViewer.render() call will create the worker if needed.
+let pdfWorker: pdfjsLib.PDFWorker | null = null
+
+function ensurePdfWorker(): pdfjsLib.PDFWorker {
+  if (!pdfWorker) {
+    if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
+      console.warn(
+        '[FastLaTeX] pdfjs-dist workerSrc is not configured. ' +
+          'Call configurePdfjsWorker() or set pdfjsLib.GlobalWorkerOptions.workerSrc ' +
+          'before rendering PDFs. See the Integration Guide (docs/howto.md).',
+      )
+    }
+    pdfWorker = new pdfjsLib.PDFWorker()
+  }
+  return pdfWorker
+}
+
+/** Configure the pdfjs-dist worker source.
+ *
+ *  **Must be called in the consumer's own source code** so that the consumer's
+ *  bundler can resolve the worker file from `node_modules/pdfjs-dist`.
+ *
+ *  ```ts
+ *  import { configurePdfjsWorker } from 'fastlatex'
+ *  configurePdfjsWorker()
+ *  ```
+ */
+export function configurePdfjsWorker(): void {
+  if (pdfjsLib.GlobalWorkerOptions.workerSrc) return
+  pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+    'pdfjs-dist/build/pdf.worker.mjs',
+    import.meta.url,
+  ).toString()
+}
 
 export class PdfViewer {
   private container: HTMLElement
@@ -181,7 +212,8 @@ export class PdfViewer {
     // Keep a copy for download — pdf.js transfers the ArrayBuffer to its worker,
     // which detaches it, so we need a separate copy that stays valid.
     this.lastPdf = pdfData.slice()
-    this.pdfDoc = await pdfjsLib.getDocument({ data: pdfData.slice(), worker: pdfWorker }).promise
+    this.pdfDoc = await pdfjsLib.getDocument({ data: pdfData.slice(), worker: ensurePdfWorker() })
+      .promise
 
     // Bail if a newer render was requested while loading
     if (generation !== this.renderGeneration) {
