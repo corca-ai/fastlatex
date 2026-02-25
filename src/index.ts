@@ -1,3 +1,4 @@
+export { ensureLanguagesRegistered } from './editor/setup'
 export { FastLatex } from './fastlatex'
 export type {
   AppStatus,

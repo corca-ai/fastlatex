@@ -142,6 +142,8 @@ export class FastLatex {
 
   private pendingBibtex = false
 
+  private externalEditor = false
+
   private disposed = false
 
   // --- Events ---
@@ -156,6 +158,8 @@ export class FastLatex {
     options: FastLatexOptions = {},
   ) {
     this.opts = options
+
+    this.externalEditor = !!this.opts.editor
 
     this.mainFile = this.opts.mainFile ?? 'main.tex'
 
@@ -284,17 +288,23 @@ export class FastLatex {
   }
 
   private initEditorState(): void {
-    if (!this.editorContainer) {
-      throw new Error('Editor container is not initialized.')
-    }
-
     const initialModel = this.models.get(this.currentFile)
 
     if (!initialModel) {
       throw new Error('Initial model is not available.')
     }
 
-    this.editor = createEditor(this.editorContainer, initialModel)
+    if (this.opts.editor) {
+      this.editor = this.opts.editor
+      this.switchingModel = true
+      this.editor.setModel(initialModel)
+      this.switchingModel = false
+    } else {
+      if (!this.editorContainer) {
+        throw new Error('Editor container is not initialized.')
+      }
+      this.editor = createEditor(this.editorContainer, initialModel)
+    }
 
     const editorService = (this.editor as any)._codeEditorService
     const originalOpenCodeEditor = editorService.openCodeEditor.bind(editorService)
@@ -728,7 +738,9 @@ export class FastLatex {
 
     this.editorChangeDisposable?.dispose()
 
-    this.editor?.dispose()
+    if (!this.externalEditor) {
+      this.editor?.dispose()
+    }
 
     for (const d of this.modelDisposables.values()) d.dispose()
 

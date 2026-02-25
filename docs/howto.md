@@ -12,6 +12,10 @@ npm install github:corca-ai/fastlatex#main
 
 **Note:** `monaco-editor` and `pdfjs-dist` are peer dependencies.
 
+## What's Included
+
+TeX Live packages are served from a **public CDN** — no setup or hosting required. The library fetches packages on demand during compilation and caches them via a Service Worker for offline use.
+
 ## Basic Usage
 
 ```typescript
@@ -67,6 +71,77 @@ editor.on('compile', ({ result }) => {
     myCustomViewer.display(result.pdf)
   }
 })
+```
+
+### Using an Existing Monaco Editor
+
+If your application already manages a Monaco editor, pass it via the `editor` option. FastLaTeX will attach its LSP features (autocompletion, hover, go-to-definition, diagnostics) and compilation pipeline to your editor without creating a duplicate instance.
+
+#### Setup
+
+You are responsible for:
+1. **Monaco worker configuration** — set `MonacoEnvironment.getWorker` yourself, since FastLaTeX only configures workers when it creates its own editor.
+2. **Editor creation and disposal** — FastLaTeX will **not** dispose your editor when `latex.dispose()` is called.
+
+FastLaTeX handles:
+- Registering `latex` and `bibtex` languages (via `ensureLanguagesRegistered`)
+- Switching the editor's model when the active file changes
+- All LSP providers and compilation
+
+#### Example
+
+```typescript
+import * as monaco from 'monaco-editor'
+import { FastLatex, ensureLanguagesRegistered } from 'fastlatex'
+import 'fastlatex/style.css'
+
+// 1. Configure Monaco workers (your responsibility)
+self.MonacoEnvironment = {
+  getWorker(_workerId, label) {
+    if (label === 'json') {
+      return new Worker(
+        new URL('monaco-editor/esm/vs/language/json/json.worker.js', import.meta.url),
+        { type: 'module' },
+      )
+    }
+    return new Worker(
+      new URL('monaco-editor/esm/vs/editor/editor.worker.js', import.meta.url),
+      { type: 'module' },
+    )
+  },
+}
+
+// 2. Register LaTeX/BibTeX languages before creating the editor
+//    so that syntax highlighting is available from the start.
+ensureLanguagesRegistered()
+
+// 3. Create your own Monaco editor
+const source = '\\documentclass{article}\n\\begin{document}\nHello!\n\\end{document}'
+
+const myEditor = monaco.editor.create(document.getElementById('editor')!, {
+  language: 'latex',
+  value: source,
+  automaticLayout: true,
+})
+
+// 4. Pass it to FastLaTeX
+const latex = new FastLatex('#editor', '#preview', {
+  editor: myEditor,
+  files: { 'main.tex': source },
+})
+
+await latex.init()
+```
+
+#### Disposal
+
+```typescript
+// FastLaTeX cleans up its own resources (engines, LSP, models)
+// but leaves your editor instance alive.
+latex.dispose()
+
+// myEditor is still usable — dispose it on your own terms.
+myEditor.dispose()
 ```
 
 ### Intelligent Rename (F2)

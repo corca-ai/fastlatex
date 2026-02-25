@@ -42,6 +42,9 @@ export type TexliveVersion = '2020' | '2025'
 // --- FastLatex component API ---
 
 export interface FastLatexOptions {
+  /** External Monaco editor instance. FastLaTeX will use it instead of creating one.
+   *  FastLaTeX will NOT dispose this editor on cleanup. */
+  editor?: import('monaco-editor').editor.IStandaloneCodeEditor
   /** TeX Live version to use. Defaults to '2025'. */
   texliveVersion?: TexliveVersion
   /** TexLive server endpoint URL. Defaults to auto-detected from BASE_URL. */

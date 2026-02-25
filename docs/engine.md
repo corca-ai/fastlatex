@@ -22,15 +22,17 @@ If you need to modify the underlying pdfTeX or BibTeX engine:
 
 Packages are fetched via synchronous XHR inside the WASM worker.
 
-- **CDN**: Served via CloudFront (`dwrg2en9emzif.cloudfront.net`).
-- **Structure**: Files are organized by TeX Live format IDs (e.g., `pdftex/26/` for `.sty` files).
+- **CDN**: Served via CloudFront (`d1jectpaw0dlvl.cloudfront.net`). This is a public CDN — no configuration is needed for basic usage.
+- **Structure**: Files are organized by TeX Live version and format IDs (e.g., `2025/pdftex/26/` for `.sty` files).
 - **Caching**: A Service Worker (`public/sw.js`) caches these files locally to enable offline compilation and speed up subsequent runs.
 
 ### URL Resolution Order
 The `texliveUrl` is determined as follows:
 1. `options.texliveUrl` passed to the constructor.
 2. `VITE_TEXLIVE_URL` environment variable.
-3. `${location.origin}${BASE_URL}texlive/` (default).
+3. Public CDN: `https://d1jectpaw0dlvl.cloudfront.net/{version}/` (default).
+
+For most users, the default CDN works out of the box — no setup required.
 
 ## Asset Resolution (WASM & Workers)
 

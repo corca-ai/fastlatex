@@ -2,13 +2,32 @@ import * as monaco from 'monaco-editor'
 import { bibLanguage, bibLanguageConfig } from './bib-language'
 import { latexLanguage, latexLanguageConfig } from './latex-language'
 
-let monacoConfigured = false
+let languagesRegistered = false
+let workersConfigured = false
 
-function ensureMonacoConfigured(): void {
-  if (monacoConfigured) return
-  monacoConfigured = true
+/** Register LaTeX and BibTeX languages with Monaco. Safe to call multiple times.
+ *  Exported so that host apps using an external editor can register syntax
+ *  highlighting before creating their own Monaco instance. */
+export function ensureLanguagesRegistered(): void {
+  if (languagesRegistered) return
+  languagesRegistered = true
 
-  // Configure Monaco workers via Vite
+  // Register LaTeX language
+  monaco.languages.register({ id: 'latex' })
+  monaco.languages.setMonarchTokensProvider('latex', latexLanguage)
+  monaco.languages.setLanguageConfiguration('latex', latexLanguageConfig)
+
+  // Register BibTeX language
+  monaco.languages.register({ id: 'bibtex' })
+  monaco.languages.setMonarchTokensProvider('bibtex', bibLanguage)
+  monaco.languages.setLanguageConfiguration('bibtex', bibLanguageConfig)
+}
+
+/** Configure Monaco workers via Vite URLs. Only needed when FastLaTeX creates its own editor. */
+function ensureWorkersConfigured(): void {
+  if (workersConfigured) return
+  workersConfigured = true
+
   ;(self as any).MonacoEnvironment = {
     getWorker(_workerId: string, label: string) {
       if (label === 'json') {
@@ -22,21 +41,16 @@ function ensureMonacoConfigured(): void {
       })
     },
   }
+}
 
-  // Register LaTeX language
-  monaco.languages.register({ id: 'latex' })
-  monaco.languages.setMonarchTokensProvider('latex', latexLanguage)
-  monaco.languages.setLanguageConfiguration('latex', latexLanguageConfig)
-
-  // Register BibTeX language
-  monaco.languages.register({ id: 'bibtex' })
-  monaco.languages.setMonarchTokensProvider('bibtex', bibLanguage)
-  monaco.languages.setLanguageConfiguration('bibtex', bibLanguageConfig)
+function ensureMonacoConfigured(): void {
+  ensureWorkersConfigured()
+  ensureLanguagesRegistered()
 }
 
 /** Create a Monaco text model for a project file. */
 export function createFileModel(content: string, filePath: string): monaco.editor.ITextModel {
-  ensureMonacoConfigured()
+  ensureLanguagesRegistered()
   const lang = filePath.endsWith('.tex')
     ? 'latex'
     : filePath.endsWith('.bib')

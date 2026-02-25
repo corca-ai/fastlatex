@@ -27,7 +27,8 @@ or a CSS selector string.
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `texliveUrl` | `string` | `auto` | TexLive server endpoint |
+| `editor` | `IStandaloneCodeEditor` | - | External Monaco editor instance. FastLaTeX will use it instead of creating one and will **not** dispose it on cleanup. |
+| `texliveUrl` | `string` | Public CDN | TexLive server endpoint. Defaults to `https://d1jectpaw0dlvl.cloudfront.net/{version}/` |
 | `mainFile` | `string` | `'main.tex'` | Main TeX file name |
 | `files` | `Record` | `{}` | Initial project files (path -> content) |
 | `serviceWorker`| `boolean`| `true` | Cache texlive packages via SW |

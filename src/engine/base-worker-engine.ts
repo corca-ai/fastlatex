@@ -45,7 +45,7 @@ export abstract class BaseWorkerEngine<TMsg = unknown> {
   }
 }
 
-const CLOUDFRONT_BASE = 'https://dwrg2en9emzif.cloudfront.net/'
+const CLOUDFRONT_BASE = 'https://d1jectpaw0dlvl.cloudfront.net/'
 
 /** Resolve the TexLive server URL from an override, env var, or current origin. */
 export function resolveTexliveUrl(
