@@ -177,10 +177,11 @@ export class SwiftLatexEngine extends BaseWorkerEngine<WorkerMessage> {
   private async injectWarmupCache(cache: WarmupCache): Promise<void> {
     const promises: Promise<unknown>[] = []
 
-    // Send each cached file to the worker via preloadtexlive
+    // Send each cached file to the worker via preloadtexlive.
+    // Copy each buffer so the original cache stays usable across multiple init() calls.
     for (const file of cache.files) {
       const msgId = `msg-${nextMsgId++}`
-      const buf = file.data
+      const buf = file.data.slice(0)
       promises.push(
         this.postMessageWithResponse(
           { cmd: 'preloadtexlive', format: file.format, filename: file.filename, data: buf, msgId },
