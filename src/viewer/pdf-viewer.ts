@@ -344,7 +344,7 @@ export class PdfViewer {
     const wrappers = new Array<HTMLElement>(numPages)
     const canvas = renderedWrapper.querySelector('canvas')!
     const pageWidth = canvas.style.width
-    const pageHeight = canvas.style.height
+    const pageAspectRatio = canvas.style.aspectRatio
     for (let i = 1; i <= numPages; i++) {
       if (i === visiblePage) {
         wrappers[i - 1] = renderedWrapper
@@ -357,7 +357,7 @@ export class PdfViewer {
         placeholder.className = 'pdf-page-container'
         placeholder.dataset.pageNum = String(i)
         placeholder.style.width = pageWidth
-        placeholder.style.height = pageHeight
+        placeholder.style.aspectRatio = pageAspectRatio
         wrappers[i - 1] = placeholder
       }
     }

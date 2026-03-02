@@ -58,10 +58,13 @@
 [data-fastlatex-runtime] .pdf-page-container {
   margin-bottom: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  max-width: 100%;
 }
 
 [data-fastlatex-runtime] .pdf-page-container canvas {
   display: block;
+  max-width: 100%;
+  height: auto;
 }
 
 [data-fastlatex-runtime] .pdf-controls {

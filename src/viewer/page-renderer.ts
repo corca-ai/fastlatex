@@ -37,6 +37,7 @@ export class PageRenderer {
     }
     canvas.style.width = `${viewport.width}px`
     canvas.style.height = `${viewport.height}px`
+    canvas.style.aspectRatio = `${viewport.width} / ${viewport.height}`
 
     const ctx = canvas.getContext('2d')!
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
