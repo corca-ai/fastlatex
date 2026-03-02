@@ -167,7 +167,8 @@ export class PdfViewer {
     this.downloadBtn.style.display = 'none'
 
     this.controlsEl.append(this.pageInfo, zoomOut, zoomLabel, zoomIn, this.downloadBtn)
-    this.container.appendChild(this.controlsEl)
+    // Don't append controlsEl here — inserted on first show via render() or
+    // setToolbarVisible(true). Keeps it fully out of the DOM when toolbar=false.
 
     this.pagesContainer = document.createElement('div')
     this.container.appendChild(this.pagesContainer)
@@ -232,7 +233,10 @@ export class PdfViewer {
     this.intrinsicPageWidth = p1.getViewport({ scale: 1 }).width
 
     this.removeLoadingOverlay()
-    if (!this.toolbarHidden) this.controlsEl.style.display = 'flex'
+    if (!this.toolbarHidden) {
+      this.container.insertBefore(this.controlsEl, this.pagesContainer)
+      this.controlsEl.style.display = 'flex'
+    }
     this.downloadBtn.style.display = ''
 
     // Clamp current page
@@ -429,7 +433,12 @@ export class PdfViewer {
   /** Show or hide the toolbar (zoom controls, page info, download button). */
   setToolbarVisible(visible: boolean): void {
     this.toolbarHidden = !visible
-    this.controlsEl.style.display = visible ? 'flex' : 'none'
+    if (visible) {
+      this.container.insertBefore(this.controlsEl, this.pagesContainer)
+      this.controlsEl.style.display = 'flex'
+    } else {
+      this.controlsEl.remove()
+    }
   }
 
   private zoom(delta: number): void {
