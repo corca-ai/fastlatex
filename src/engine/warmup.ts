@@ -4,7 +4,6 @@
  */
 import type { CachedTexliveFile, WarmupCache } from '../types'
 import { resolveTexliveUrl } from './base-worker-engine'
-import { fetchGzWithFallback } from './fetch-gz'
 import { KNOWN_404S, PRELOAD_FILES } from './texlive-manifest'
 
 export interface WarmupOptions {
@@ -56,9 +55,9 @@ export async function warmup(options?: WarmupOptions): Promise<WarmupCache> {
       const entry = queue.shift()!
       try {
         const url = `${baseUrl}pdftex/${entry.format}/${entry.filename}`
-        const fetchOpts: RequestInit = signal ? { signal } : {}
-        const data = await fetchGzWithFallback(url, fetchOpts)
-        if (data) {
+        const resp = await fetch(url, signal ? { signal } : {})
+        if (resp.ok) {
+          const data = await resp.arrayBuffer()
           files.push({ format: entry.format, filename: entry.filename, data })
         }
       } catch {

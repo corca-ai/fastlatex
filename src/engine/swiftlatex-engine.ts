@@ -1,6 +1,5 @@
 import type { CompileResult, TexliveVersion, WarmupCache } from '../types'
 import { BaseWorkerEngine, resolveTexliveUrl } from './base-worker-engine'
-import { fetchGzWithFallback, readStreamToBuffer } from './fetch-gz'
 import { parseTexErrors } from './parse-errors'
 
 export interface SwiftLatexEngineOptions {
@@ -163,8 +162,9 @@ export class SwiftLatexEngine extends BaseWorkerEngine<WorkerMessage> {
   /** Pre-load a texlive file into the worker's MEMFS cache. */
   private async preloadTexliveFile(format: number, filename: string, url: string): Promise<void> {
     try {
-      const buf = await fetchGzWithFallback(url)
-      if (!buf) return
+      const resp = await fetch(url)
+      if (!resp.ok) return
+      const buf = await resp.arrayBuffer()
       const msgId = `msg-${nextMsgId++}`
       await this.postMessageWithResponse(
         { cmd: 'preloadtexlive', format, filename, data: buf, msgId },
@@ -230,47 +230,42 @@ export class SwiftLatexEngine extends BaseWorkerEngine<WorkerMessage> {
   }
 
   /**
-   * Try fetching url.gz first (with DecompressionStream), fall back to raw url.
-   * Wraps the shared fetchGzWithFallback with download-progress tracking for
-   * the .fmt preload.
+   * Fetch a URL with optional download-progress tracking for the .fmt preload.
    */
   private async fetchGzWithProgress(url: string): Promise<ArrayBuffer | null> {
-    if (typeof DecompressionStream !== 'undefined' && this.onProgress) {
-      try {
-        const resp = await fetch(`${url}.gz`)
-        if (resp.ok) {
-          return await this.decompressWithProgress(resp)
+    try {
+      const resp = await fetch(url)
+      if (!resp.ok) return null
+      if (this.onProgress && resp.body) {
+        const contentLength = Number.parseInt(resp.headers.get('Content-Length') || '0', 10)
+        if (contentLength) {
+          return await this.readWithProgress(resp, contentLength)
         }
-      } catch {
-        // .gz fetch or decompress failed — try shared fallback
       }
+      return await resp.arrayBuffer()
+    } catch {
+      return null
     }
-    return fetchGzWithFallback(url)
   }
 
-  private async decompressWithProgress(resp: Response): Promise<ArrayBuffer> {
-    const ds = new DecompressionStream('gzip')
-    const contentLength = Number.parseInt(resp.headers.get('Content-Length') || '0', 10)
+  private async readWithProgress(resp: Response, contentLength: number): Promise<ArrayBuffer> {
+    const reader = resp.body!.getReader()
+    const chunks: Uint8Array[] = []
     let loaded = 0
-    const engine = this
-
-    const progressStream = new ReadableStream({
-      async start(controller) {
-        const reader = resp.body!.getReader()
-        for (;;) {
-          const { done, value } = await reader.read()
-          if (done) break
-          loaded += value.length
-          if (contentLength && engine.onProgress) {
-            engine.onProgress(Math.round((loaded / contentLength) * 100))
-          }
-          controller.enqueue(value)
-        }
-        controller.close()
-      },
-    })
-
-    return readStreamToBuffer(progressStream.pipeThrough(ds))
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      chunks.push(value)
+      loaded += value.length
+      this.onProgress?.(Math.round((loaded / contentLength) * 100))
+    }
+    const result = new Uint8Array(loaded)
+    let offset = 0
+    for (const c of chunks) {
+      result.set(c, offset)
+      offset += c.length
+    }
+    return result.buffer
   }
 
   async mkdir(path: string): Promise<void> {
