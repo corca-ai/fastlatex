@@ -1,22 +1,7 @@
-import * as monaco from 'monaco-editor'
 import { describe, expect, it } from 'vitest'
 import { createDefinitionProvider } from '../definition-provider'
 import { ProjectIndex } from '../project-index'
-
-interface MockModel {
-  getLineContent(lineNumber: number): string
-  uri: monaco.Uri
-}
-
-function mockModel(lines: string[], path = 'main.tex'): MockModel {
-  const p = path.startsWith('/') ? path : `/${path}`
-  return {
-    getLineContent(lineNumber: number) {
-      return lines[lineNumber - 1] ?? ''
-    },
-    uri: monaco.Uri.parse(`file://${p}`),
-  }
-}
+import { type MockModel, mockModel } from './test-helpers'
 
 describe('createDefinitionProvider', () => {
   const index = new ProjectIndex()

@@ -22,6 +22,7 @@ export const languages = {
   registerHoverProvider: () => ({ dispose() {} }),
   registerDocumentSymbolProvider: () => ({ dispose() {} }),
   registerReferenceProvider: () => ({ dispose() {} }),
+  registerRenameProvider: () => ({ dispose() {} }),
   register: () => {},
   setMonarchTokensProvider: () => {},
   setLanguageConfiguration: () => {},
@@ -41,6 +42,12 @@ export class Uri {
     const scheme = url.split('://')[0]!
     const path = url.split('://')[1]!
     return new Uri(scheme, path)
+  }
+  with(change: { path?: string; scheme?: string }): Uri {
+    return new Uri(change.scheme ?? this.scheme, change.path ?? this.path)
+  }
+  toString(): string {
+    return `${this.scheme}://${this.path}`
   }
 }
 
